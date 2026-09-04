@@ -1,0 +1,44 @@
+appId: com.terminalbuddy.app
+productName: Terminal Buddy
+copyright: MIT
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+
+# node-pty ships a prebuilt native binding. It must stay outside the asar or
+# the loader cannot dlopen it at runtime.
+asarUnpack:
+  - '**/node_modules/@lydell/node-pty*/**'
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Terminal Buddy
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+
+linux:
+  target: [AppImage]
+  category: Utility
+
+mac:
+  target: [dmg]
+  category: public.app-category.developer-tools

@@ -1,0 +1,154 @@
+<div align="center">
+  <img src="build/icon.png" width="96" alt="Terminal Buddy" />
+  <h1>Terminal Buddy</h1>
+  <p><b>A terminal manager for people running too many coding agents at once.</b></p>
+  <p>Tabs or grid. Right-click any folder → <i>Open in Buddy</i>. Plus a browsable catalog of every Claude&nbsp;Code and Codex skill and past chat on your machine — so you can resume work instead of hunting for it.</p>
+</div>
+
+---
+
+## Why
+
+If you keep six or eight terminals open across as many projects, two things go wrong:
+
+1. **You lose track of which one needs you.** Agents run for minutes, then quietly stop and wait. Terminal Buddy watches each pane's output and flags the ones that went silent.
+2. **You lose your old sessions.** Claude Code and Codex both keep every conversation on disk as JSONL, but there's no way to browse them. Terminal Buddy indexes them, shows you real titles and previews, and resumes any of them in a new terminal with one click.
+
+It is a personal tool, published in case it's useful. There is no telemetry, no account, and no server — everything reads from your local disk.
+
+## Features
+
+**Terminals**
+- 1–16 panes, switchable between **tabs** and **grid** at any time (`Ctrl+Shift+G`)
+- Auto-detects PowerShell 7, Windows PowerShell, Command Prompt, Git Bash and WSL
+- **Attention badges** — a pane that produced output and then went quiet gets flagged, so you can see at a glance which agent is waiting on you
+- **Broadcast mode** — type once, send to every terminal (`Ctrl+Shift+B`)
+- Rename tabs (double-click), search scrollback (`Ctrl+Shift+F`), reopen your layout on launch
+- GPU-accelerated rendering, 5000 lines of scrollback per pane by default
+
+**Catalog** (`Ctrl+Shift+E`)
+- **Chats** — every Claude Code and Codex session on disk, newest first, with the title, first prompt, folder, turn count and age. **Resume** launches a terminal in the original folder and runs the resume command for you. **Export .md** writes a clean Markdown transcript.
+- **Skills** — every `SKILL.md` from your Claude plugins, user folder and per-project `.claude/skills`, plus Codex prompts. Deduplicated across cached plugin versions.
+- **Projects** — every folder you've worked in, derived from your session history. One click opens a terminal there.
+
+**Shell integration**
+- **Open in Buddy** on any folder in Explorer
+- A `buddy` command for your PATH — `buddy` opens the current folder, `buddy <path>` opens that one
+- Opening a second folder adds a tab to the running window instead of launching another copy
+
+## Install
+
+Grab the installer or the portable `.exe` from [Releases](../../releases), or build it yourself:
+
+```bash
+git clone <this repo>
+cd terminal-buddy
+npm install
+npm run dev          # run it
+npm run dist         # build installer + portable into release/
+```
+
+Requires Node 18+. **No C++ toolchain needed** — the PTY layer ships prebuilt binaries.
+
+After first launch, open **Settings (`Ctrl+,`) → Windows integration** and install the context menu and the `buddy` command.
+
+> **Windows 11 note:** the context menu entry appears under **“Show more options”** (or `Shift+F10`), not the short default menu. Putting an entry in the top-level Win11 menu requires shipping a signed MSIX package with a COM handler, which is more machinery than this tool warrants.
+
+## Keyboard
+
+| Key | Action |
+| --- | --- |
+| `Ctrl+Shift+T` | New terminal |
+| `Ctrl+Shift+D` | Duplicate terminal (same folder) |
+| `Ctrl+Shift+W` | Close terminal |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous |
+| `Alt+1` … `Alt+9` | Jump to terminal |
+| `Ctrl+Shift+G` | Toggle tabs / grid |
+| `Ctrl+Shift+E` | Toggle catalog |
+| `Ctrl+Shift+P` | Command palette |
+| `Ctrl+Shift+F` | Search in terminal |
+| `Ctrl+Shift+B` | Broadcast to all terminals |
+| `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste |
+| Right-click | Copy selection, or paste if nothing selected |
+| `Ctrl+,` | Settings |
+
+Bare `Ctrl` combos are deliberately left alone — `Ctrl+C`, `Ctrl+W` and friends belong to your shell.
+
+## How it reads your agent history
+
+Nothing is guessed; both CLIs write structured logs.
+
+| | Claude Code | Codex |
+| --- | --- | --- |
+| Location | `~/.claude/projects/<slug>/<uuid>.jsonl` | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` |
+| Session id | the filename | `session_meta.payload.session_id` |
+| Title | `ai-title` records, else first real prompt | first real user message |
+| Folder | `cwd` on user records | `session_meta.payload.cwd` |
+
+Both stores are large — around 300 MB here — so every file is parsed once and cached against its size and mtime. The first scan takes a few seconds with a progress bar; later launches are instant. Parsing streams line by line and only runs `JSON.parse` on lines that could possibly match, so a 20 MB transcript costs a read, not a heap.
+
+Sessions whose only prompts are machinery (sub-agent runs, `/exit`, injected `AGENTS.md` or caveat blocks) are flagged **internal** and hidden behind a toggle — but a session Claude gave a real title is always kept, even if it opens with a caveat block.
+
+The resume commands are **templates** in Settings:
+
+```
+claude --resume {id}
+codex resume {id}
+```
+
+If either CLI changes its flags, that's a settings edit rather than a new release. Codex records both a thread id and a rollout id; the detail view exposes the alternate one if the first doesn't take.
+
+## Architecture
+
+```
+main process                      renderer
+├─ PtyManager      spawn/write/   ├─ TerminalPane   one xterm per session,
+│                  resize/kill,   │                 never unmounted
+│                  8ms output     ├─ TerminalArea   tabs ⇄ grid
+│                  batching       ├─ Sidebar        catalog + transcripts
+├─ CatalogService  streaming      ├─ Palette        fuzzy jump
+│                  JSONL index    └─ store          zustand
+│                  + mtime cache
+├─ ShellIntegration  registry .reg import, PATH via .NET
+└─ WindowManager   single-instance lock, argv → new tab
+```
+
+Two details worth knowing if you fork this:
+
+- **Hidden panes keep their full size.** In tab mode every pane is absolutely positioned at full size and only `visibility` changes. A `display:none` terminal measures as zero, so `fit()` would resize the pty to nonsense on every tab switch.
+- **The pid arrives late.** On Windows, ConPTY populates `pty.pid` asynchronously; reading it at spawn always returns `0`. The manager refreshes it when the first output lands and pushes the correction to the UI.
+
+## Limitations
+
+- **Terminals don't survive a restart.** Closing the app kills its ptys. Real persistence needs a detached daemon holding the PTYs, which roughly doubles the architecture — and since both agent CLIs have their own resume, the catalog covers the actual need. Layout and folders *are* restored.
+- Windows is the target. The code paths for macOS/Linux exist (shell detection, packaging targets) but are untested; the Explorer integration is Windows-only by nature.
+- Skills are catalogued and searchable, not editable. "Type `/name`" writes the invocation into the focused terminal.
+
+## Development
+
+```bash
+npm run dev         # electron-vite dev server with HMR
+npm run typecheck   # tsc over main, preload and renderer
+npm run build       # compile to out/
+npm test            # typecheck + build + all three suites below
+```
+
+The tests drive the **real application**, not mocks:
+
+| Script | What it proves |
+| --- | --- |
+| `npm run test:smoke` | Boots the app over the Chrome DevTools Protocol, spawns a pty and round-trips `echo` through it, confirms the catalog indexed real skills/chats/projects, toggles the sidebar and grid, saves a screenshot. 13 assertions. |
+| `npm run test:grid` | Opens 6 terminals, tiles them, checks every pane has real geometry, and waits for the attention badges to fire. |
+| `npm run test:registry` | Round-trips the generated `.reg` through the real `reg.exe` under a scratch key (paths with spaces and all), then deletes it. |
+
+Set `BUDDY_EXE` to point the harness at a packaged build instead of `out/`:
+
+```bash
+BUDDY_EXE="release/win-unpacked/Terminal Buddy.exe" npm run test:smoke
+```
+
+Regenerate the icon with `npm run icon` (pure Python, no image libraries needed).
+
+## License
+
+MIT

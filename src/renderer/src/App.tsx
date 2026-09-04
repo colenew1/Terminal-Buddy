@@ -1,0 +1,197 @@
+import { useEffect, useRef, useState } from 'react'
+import { TopBar, TabBar } from './components/Chrome'
+import TerminalArea from './components/TerminalArea'
+import Sidebar from './components/Sidebar'
+import Palette from './components/Palette'
+import SettingsPanel from './components/SettingsPanel'
+import { useStore } from './store/useStore'
+import { matchShortcut } from './lib/shortcuts'
+import { get as getTerm, writeTo } from './lib/terminals'
+
+export default function App(): React.JSX.Element {
+  const ready = useStore((s) => s.ready)
+  const sidebarOpen = useStore((s) => s.sidebarOpen)
+  const paletteOpen = useStore((s) => s.paletteOpen)
+  const settingsOpen = useStore((s) => s.settingsOpen)
+  const broadcast = useStore((s) => s.broadcast)
+  const toast = useStore((s) => s.toast)
+
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    void useStore.getState().boot()
+  }, [])
+
+  // One pty bridge for every pane, rather than a listener per terminal.
+  useEffect(() => {
+    const offData = window.buddy.pty.onData((id, data) => {
+      writeTo(id, data)
+      useStore.getState().markData(id)
+    })
+    const offExit = window.buddy.pty.onExit((id, code) => {
+      writeTo(id, `\r\n\x1b[38;5;244m[process exited with code ${code}]\x1b[0m\r\n`)
+      useStore.getState().markExit(id, code)
+    })
+    const offInfo = window.buddy.pty.onInfo((id, patch) => useStore.getState().patchSession(id, patch))
+    const offProgress = window.buddy.catalog.onProgress((p) => useStore.setState({ scanProgress: p }))
+    const offFolder = window.buddy.app.onOpenFolder((dir) => {
+      void useStore.getState().openSession({ cwd: dir })
+    })
+    return () => {
+      offData()
+      offExit()
+      offInfo()
+      offProgress()
+      offFolder()
+    }
+  }, [])
+
+  // Drives the "went quiet, probably waiting on you" badge.
+  useEffect(() => {
+    const t = setInterval(() => useStore.getState().sweepAttention(), 400)
+    return () => clearInterval(t)
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && searchOpen) {
+        setSearchOpen(false)
+        const id = useStore.getState().activeId
+        if (id) getTerm(id)?.search.clearDecorations()
+        return
+      }
+
+      const hit = matchShortcut(e)
+      if (!hit) return
+      const s = useStore.getState()
+
+      // Copy/paste must stay available while a modal has focus; everything else
+      // only makes sense against the terminal grid.
+      if (hit === 'copy' || hit === 'paste') {
+        const id = s.activeId
+        if (!id) return
+        const h = getTerm(id)
+        if (!h) return
+        e.preventDefault()
+        if (hit === 'copy') {
+          const sel = h.term.getSelection()
+          if (sel) void navigator.clipboard.writeText(sel)
+        } else {
+          void navigator.clipboard.readText().then((text) => {
+            if (text) window.buddy.pty.write(id, text)
+          })
+        }
+        return
+      }
+
+      e.preventDefault()
+      if (hit.startsWith('jump:')) return s.jumpTo(Number(hit.slice(5)))
+
+      switch (hit) {
+        case 'new': {
+          const active = s.sessions.find((x) => x.id === s.activeId)
+          void window.buddy.app.paths().then((p) => s.openSession({ cwd: active?.cwd ?? p.home }))
+          break
+        }
+        case 'duplicate': {
+          const active = s.sessions.find((x) => x.id === s.activeId)
+          if (active) void s.openSession({ cwd: active.cwd, shellId: active.shellId })
+          break
+        }
+        case 'close':
+          if (s.activeId) s.closeSession(s.activeId)
+          break
+        case 'next':
+          s.cycle(1)
+          break
+        case 'prev':
+          s.cycle(-1)
+          break
+        case 'layout':
+          s.setLayout(s.layout === 'tabs' ? 'grid' : 'tabs')
+          break
+        case 'sidebar':
+          s.setSidebar(!s.sidebarOpen)
+          break
+        case 'palette':
+          s.setPalette(true)
+          break
+        case 'settings':
+          s.setSettingsOpen(true)
+          break
+        case 'broadcast':
+          s.toggleBroadcast()
+          break
+        case 'search':
+          setSearchOpen(true)
+          setTimeout(() => searchRef.current?.select(), 0)
+          break
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [searchOpen])
+
+  const runSearch = (dir: 1 | -1): void => {
+    const id = useStore.getState().activeId
+    if (!id || !searchTerm) return
+    const h = getTerm(id)
+    if (!h) return
+    if (dir === 1) h.search.findNext(searchTerm)
+    else h.search.findPrevious(searchTerm)
+  }
+
+  if (!ready) {
+    return (
+      <div className="boot">
+        <div className="brand-mark big" />
+        <span>Starting Terminal Buddy…</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`app ${broadcast ? 'is-broadcast' : ''}`}>
+      <TopBar />
+      <div className="body">
+        {sidebarOpen && <Sidebar />}
+        <main className="main">
+          <TabBar />
+          <TerminalArea />
+          {searchOpen && (
+            <div className="findbar">
+              <input
+                ref={searchRef}
+                autoFocus
+                placeholder="Find in terminal"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') runSearch(e.shiftKey ? -1 : 1)
+                  if (e.key === 'Escape') setSearchOpen(false)
+                }}
+              />
+              <button className="icon-btn" onClick={() => runSearch(-1)} title="Previous">
+                ↑
+              </button>
+              <button className="icon-btn" onClick={() => runSearch(1)} title="Next">
+                ↓
+              </button>
+              <button className="icon-btn" onClick={() => setSearchOpen(false)} title="Close">
+                ✕
+              </button>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {broadcast && <div className="broadcast-strip">Broadcast on — every keystroke goes to all terminals</div>}
+      {paletteOpen && <Palette />}
+      {settingsOpen && <SettingsPanel />}
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  )
+}
