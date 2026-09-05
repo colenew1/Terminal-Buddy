@@ -2,7 +2,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join, basename } from 'node:path'
 import { homedir } from 'node:os'
-import type { Agent, FeedEvent } from '@shared/types'
+import type { Agent, FeedEvent, FeedSource } from '@shared/types'
 
 /**
  * Turns a running agent into a readable conversation.
@@ -33,6 +33,9 @@ interface Attached {
   offset: number
   seq: number
   lastLookup: number
+  /** A JSONL writer can be observed between writes; never discard a partial row. */
+  pending: string
+  pinned: boolean
 }
 
 function textFromClaude(content: unknown): { text: string; tools: { name: string; input: unknown }[] } {
@@ -65,6 +68,8 @@ export function describeTool(name: string, input: unknown): { verb: string; deta
       return { verb: 'Edited', detail: short }
     case 'Bash':
     case 'PowerShell':
+    case 'exec':
+    case 'exec_command':
       return { verb: 'Ran', detail: String(i.command ?? i.description ?? '').slice(0, 120) }
     case 'Glob':
     case 'Grep':
@@ -76,14 +81,19 @@ export function describeTool(name: string, input: unknown): { verb: string; deta
       return { verb: 'Delegated', detail: String(i.description ?? '').slice(0, 80) }
     case 'TodoWrite':
       return { verb: 'Updated the plan', detail: '' }
-    default:
+    default: {
+      // MCP tools arrive as mcp__<server>__<tool>; say it the readable way.
+      const mcp = /^mcp__([^_]+(?:_[^_]+)*)__(.+)$/.exec(name)
+      if (mcp) return { verb: mcp[2].replace(/_/g, ' '), detail: mcp[1] }
       return { verb: name, detail: short }
+    }
   }
 }
 
 export class FeedService {
   private attached = new Map<string, Attached>()
   private timer: NodeJS.Timeout | null = null
+  private ticking = false
 
   constructor(
     private emit: (sessionId: string, events: FeedEvent[]) => void,
@@ -95,18 +105,21 @@ export class FeedService {
    * writing a transcript in this folder identifies itself by doing so, which
    * means running `claude` by hand works exactly like resuming from the catalog.
    */
-  attach(sessionId: string, cwd: string): void {
+  attach(sessionId: string, cwd: string, source?: FeedSource): void {
     if (this.attached.has(sessionId)) return
     this.attached.set(sessionId, {
       sessionId,
-      agent: null,
+      agent: source?.agent ?? null,
       cwd,
       since: Date.now() - 15_000,
-      file: null,
+      file: source?.path ?? null,
       offset: 0,
       seq: 0,
-      lastLookup: 0
+      lastLookup: 0,
+      pending: '',
+      pinned: !!source
     })
+    if (source) this.onAgent(sessionId, source.agent)
     if (!this.timer) this.timer = setInterval(() => void this.tick(), 500)
   }
 
@@ -172,12 +185,17 @@ export class FeedService {
   }
 
   private async tick(): Promise<void> {
+    // Slow disk reads must not overlap ticks and replay/reorder history.
+    if (this.ticking) return
+    this.ticking = true
+    try {
     for (const a of this.attached.values()) {
       if (!a.file) {
         // Discovery is a directory scan, so do it far less often than tailing.
         if (Date.now() - a.lastLookup < 2000) continue
         a.lastLookup = Date.now()
         const found = await this.findFile(a)
+        if (this.attached.get(a.sessionId) !== a) continue
         if (!found) continue
         a.file = found.file
         a.agent = found.agent
@@ -186,15 +204,37 @@ export class FeedService {
       }
       try {
         const size = statSync(a.file).size
-        if (size < a.offset) a.offset = 0 // truncated or rotated
+        if (size < a.offset) {
+          a.offset = 0 // truncated or rotated
+          a.pending = ''
+        }
         if (size === a.offset) continue
         const chunk = await readRange(a.file, a.offset, size)
+        if (this.attached.get(a.sessionId) !== a) continue
         a.offset = size
-        const events = this.parse(a, chunk)
+        const buffered = a.pending + chunk
+        const lastLine = buffered.lastIndexOf('\n')
+        if (lastLine < 0) {
+          a.pending = buffered
+          continue
+        }
+        a.pending = buffered.slice(lastLine + 1)
+        const events = this.parse(a, buffered.slice(0, lastLine + 1))
         if (events.length) this.emit(a.sessionId, events)
       } catch {
-        /* the file can vanish mid-read; the next tick re-finds it */
+        // A rotated/deleted transcript must go back through discovery. A
+        // transient read error keeps its claim and is retried on the next tick.
+        if (a.file && !a.pinned && !existsSync(a.file)) {
+          a.file = null
+          a.agent = null
+          a.offset = 0
+          a.pending = ''
+          this.onAgent(a.sessionId, null)
+        }
       }
+    }
+    } finally {
+      this.ticking = false
     }
   }
 
@@ -220,7 +260,7 @@ export class FeedService {
           if (text.trim()) push({ role: d.type as 'user' | 'assistant', text: text.trim() })
           for (const t of tools) {
             const { verb, detail } = describeTool(t.name, t.input)
-            push({ role: 'tool', text: detail, tool: verb })
+            push({ role: 'tool', text: detail, tool: verb, toolName: t.name })
           }
         }
       } else {
@@ -228,6 +268,23 @@ export class FeedService {
         if (d.type === 'event_msg' && typeof p.message === 'string') {
           if (p.type === 'user_message') push({ role: 'user', text: p.message.trim() })
           else if (p.type === 'agent_message') push({ role: 'assistant', text: p.message.trim() })
+        } else if (
+          d.type === 'response_item' &&
+          (p.type === 'function_call' || p.type === 'custom_tool_call')
+        ) {
+          const name = String(p.name ?? 'tool')
+          const namespace = typeof p.namespace === 'string' ? p.namespace : ''
+          const toolName = namespace ? `${namespace}__${name}` : name
+          let input: unknown = p.arguments ?? p.input ?? {}
+          if (typeof input === 'string') {
+            try {
+              input = JSON.parse(input)
+            } catch {
+              input = { command: input }
+            }
+          }
+          const { verb, detail } = describeTool(toolName, input)
+          push({ role: 'tool', text: detail, tool: verb, toolName })
         }
       }
     }

@@ -1,9 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { WebContents } from 'electron'
 import type { SessionInfo, SessionSpec, ShellDef } from '@shared/types'
 import { resolveShell } from './shells'
+import { Terminal as HeadlessTerminal } from '@xterm/headless'
+import { SerializeAddon } from '@xterm/addon-serialize'
+import type { TerminalSnapshot } from '@shared/types'
 
 type IPty = {
   pid: number
@@ -25,6 +29,10 @@ const FLUSH_MS = 8
 const FLUSH_BYTES = 48 * 1024
 
 interface Entry {
+  screen: HeadlessTerminal
+  serializer: SerializeAddon
+  seq: number
+  exitCode?: number
   id: string
   pty: IPty
   info: SessionInfo
@@ -34,13 +42,29 @@ interface Entry {
   exited: boolean
   sawFirstData: boolean
   pendingCommand: string | null
+  submitting?: boolean
+  inputRevision?: number
 }
 
 export class PtyManager {
   private entries = new Map<string, Entry>()
   private target: WebContents | null = null
+  onEvent: ((channel: string, ...args: unknown[]) => void) | null = null
+  private scrollback = 5000
 
-  constructor(private shells: ShellDef[]) {}
+  setScrollback(value: number): void {
+    if (!Number.isFinite(value)) return
+    this.scrollback = Math.max(0, Math.min(100000, Math.floor(value)))
+    for (const entry of this.entries.values()) entry.screen.options.scrollback = this.scrollback
+  }
+
+  constructor(private shells: ShellDef[], private activity?: {
+    register(id: string, title: string, launched: boolean): void
+    input(id: string, data: string): void
+    output(id: string): void
+    exit(id: string): void
+    remove(id: string): void
+  }) {}
 
   setTarget(wc: WebContents | null): void {
     this.target = wc
@@ -49,6 +73,7 @@ export class PtyManager {
   private send(channel: string, ...args: unknown[]): void {
     const wc = this.target
     if (wc && !wc.isDestroyed()) wc.send(channel, ...args)
+    this.onEvent?.(channel, ...args)
   }
 
   private safeCwd(cwd: string | undefined): string {
@@ -66,6 +91,11 @@ export class PtyManager {
     // Electron leaks these into children and they confuse CLIs.
     delete env.ELECTRON_RUN_AS_NODE
     delete env.ELECTRON_NO_ATTACH_CONSOLE
+    // The launcher (including coding tools) may disable color for its own
+    // captured output. These children are real interactive, truecolor terminals.
+    delete env.NO_COLOR
+    env.FORCE_COLOR = '3'
+    env.CLICOLOR = '1'
     env.TERM = 'xterm-256color'
     env.COLORTERM = 'truecolor'
     env.TERM_PROGRAM = 'terminal-buddy'
@@ -75,7 +105,17 @@ export class PtyManager {
   create(spec: SessionSpec): SessionInfo {
     const shell = resolveShell(this.shells, spec.shellId)
     const cwd = this.safeCwd(spec.cwd)
+    if (spec.requireCwd && cwd !== spec.cwd) throw new Error('The saved project folder is unavailable; it was not replaced with a different folder.')
     const id = randomUUID()
+    // Claude supports assigning an explicit ID before its first message. This
+    // lets new chats be restored without guessing which transcript belongs to them.
+    let resume = spec.resume
+    let command = spec.initialCommand
+    if (spec.agent === 'claude' && command === 'claude' && !resume) {
+      const chatId = randomUUID()
+      resume = { agent: 'claude', id: chatId, path: join(homedir(), '.claude', 'projects', cwd.replace(/[^A-Za-z0-9]/g, '-'), chatId + '.jsonl') }
+      command = `claude --session-id ${chatId}`
+    }
 
     const pty = loadPty().spawn(shell.path, shell.args, {
       name: 'xterm-256color',
@@ -92,10 +132,18 @@ export class PtyManager {
       shellId: shell.id,
       shellLabel: shell.label,
       title: spec.title || basename(cwd),
-      pid: pty.pid
+      pid: pty.pid,
+      resume
     }
 
+    const screen = new HeadlessTerminal({ cols: 80, rows: 24, scrollback: this.scrollback, allowProposedApi: true })
+    const serializer = new SerializeAddon()
+    screen.loadAddon(serializer)
+    // One parser answers terminal queries even while a view is being attached.
+    // Visible renderers suppress these replies so they cannot answer twice.
+    screen.onData((data) => { try { pty.write(data) } catch { /* exited */ } })
     const entry: Entry = {
+      screen, serializer, seq: 0,
       id,
       pty,
       info,
@@ -104,11 +152,13 @@ export class PtyManager {
       timer: null,
       exited: false,
       sawFirstData: false,
-      pendingCommand: spec.initialCommand ?? null
+      pendingCommand: command ?? null
     }
     this.entries.set(id, entry)
+    this.activity?.register(id, info.title, !!spec.initialCommand)
 
     pty.onData((data) => {
+      this.activity?.output(id)
       entry.buffer.push(data)
       entry.bufferedBytes += data.length
 
@@ -136,10 +186,12 @@ export class PtyManager {
     })
 
     pty.onExit(({ exitCode }) => {
+      this.activity?.exit(id)
       entry.exited = true
+      entry.exitCode = exitCode
       this.flush(entry)
       this.send('pty:exit', id, exitCode)
-      this.entries.delete(id)
+      // Retain the screen until the pane is closed; exited terminals can pop out too.
     })
 
     // Safety net: if the shell never emits anything, still run the command.
@@ -165,36 +217,69 @@ export class PtyManager {
     const data = entry.buffer.join('')
     entry.buffer = []
     entry.bufferedBytes = 0
-    this.send('pty:data', entry.id, data)
+    entry.screen.write(data, () => {
+      if (this.entries.get(entry.id) !== entry) return
+      this.send('pty:data', entry.id, data, ++entry.seq)
+    })
   }
 
   write(id: string, data: string): void {
     const e = this.entries.get(id)
-    if (e && !e.exited) e.pty.write(data)
+    if (e && !e.exited) {
+      // A real keystroke while a paste is settling cancels the queued Enter.
+      // Device-status replies are terminal plumbing, not user intervention.
+      if (!/^\x1b\[[\d;?]*[Rcn]$/.test(data)) e.inputRevision = (e.inputRevision ?? 0) + 1
+      this.activity?.input(id, data)
+      e.pty.write(data)
+    }
+  }
+
+  async submit(id: string, data: string): Promise<void> {
+    const entry = this.entries.get(id)
+    if (!entry || entry.exited) throw new Error('This terminal has closed.')
+    if (entry.submitting) throw new Error('A message is already being submitted.')
+    entry.submitting = true
+    try {
+      this.write(id, data)
+      const revision = entry.inputRevision
+      // TUI paste handlers debounce input. An adjacent CR can be consumed as
+      // part of the paste rather than a submit key, even across separate writes.
+      await new Promise<void>((resolve) => setTimeout(resolve, 300))
+      if (this.entries.get(id) !== entry || entry.exited) throw new Error('Terminal closed after pasting; Enter was not sent.')
+      if (entry.inputRevision !== revision) throw new Error('Terminal input changed after pasting; queued Enter was cancelled. Check the terminal before sending again.')
+      this.write(id, '\r')
+    } finally {
+      entry.submitting = false
+    }
   }
 
   resize(id: string, cols: number, rows: number): void {
     const e = this.entries.get(id)
-    if (!e || e.exited) return
+    if (!e) return
     if (!Number.isFinite(cols) || !Number.isFinite(rows)) return
-    const c = Math.max(2, Math.floor(cols))
-    const r = Math.max(1, Math.floor(rows))
+    const c = Math.max(2, Math.min(1000, Math.floor(cols)))
+    const r = Math.max(1, Math.min(500, Math.floor(rows)))
+    e.screen.resize(c, r)
     try {
-      e.pty.resize(c, r)
+      if (!e.exited) e.pty.resize(c, r)
     } catch {
       /* pty raced with exit */
     }
   }
 
   kill(id: string): void {
+    this.activity?.remove(id)
     const e = this.entries.get(id)
     if (!e) return
+    e.exited = true
+    if (e.timer) clearTimeout(e.timer)
     try {
       e.pty.kill()
     } catch {
       /* already gone */
     }
     this.entries.delete(id)
+    e.screen.dispose()
   }
 
   killAll(): void {
@@ -202,7 +287,32 @@ export class PtyManager {
   }
 
   list(): SessionInfo[] {
-    return [...this.entries.values()].map((e) => e.info)
+    return [...this.entries.values()].filter((e) => !e.exited).map((e) => e.info)
+  }
+
+  describe(id: string): { session: SessionInfo; exited: boolean; exitCode?: number } | null {
+    const e = this.entries.get(id)
+    return e ? { session: e.info, exited: e.exited, exitCode: e.exitCode } : null
+  }
+
+  rename(id: string, title: string): void {
+    const e = this.entries.get(id)
+    if (e) e.info.title = title
+  }
+
+  snapshot(id: string): Promise<TerminalSnapshot> {
+    const e = this.entries.get(id)
+    if (!e) return Promise.reject(Error('This terminal has closed.'))
+    this.flush(e)
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(Error('Terminal state could not be captured in time.')), 10000)
+      timeout.unref()
+      e.screen.write('', () => {
+        clearTimeout(timeout)
+        if (this.entries.get(id) !== e) return reject(Error('This terminal has closed.'))
+        resolve({ data: e.serializer.serialize(), seq: e.seq, cols: e.screen.cols, rows: e.screen.rows })
+      })
+    })
   }
 }
 

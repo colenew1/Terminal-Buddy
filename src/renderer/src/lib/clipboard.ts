@@ -34,6 +34,7 @@ export async function handleClipboard(action: ClipboardAction): Promise<boolean>
   if (!id) return false
   const h = getTerm(id)
   if (!h) return false
+  if (h.detached) { window.buddy.popout.focus(id); return true }
 
   if (action === 'copy') {
     const sel = h.term.getSelection()
@@ -46,7 +47,10 @@ export async function handleClipboard(action: ClipboardAction): Promise<boolean>
 
   if (action === 'paste') {
     const text = await window.buddy.clipboard.read()
-    if (text) window.buddy.pty.write(id, text)
+    if (text) {
+      useStore.getState().markInput(id)
+      h.term.paste(text)
+    }
     return true
   }
 

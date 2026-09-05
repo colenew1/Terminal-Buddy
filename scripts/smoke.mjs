@@ -3,39 +3,24 @@
  * renderer, and saves a screenshot. Run: node scripts/smoke.mjs
  */
 import { spawn } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
-/**
- * Start from a clean workspace. Terminals, spans and layout all persist, so
- * without this a previous run's saved state leaks into the next one's
- * assertions - and the suite leaves the user's app full of stray panes.
- */
-function resetWorkspace() {
-  const file = join(process.env.APPDATA ?? '', 'terminal-buddy', 'workspace.json')
-  if (!existsSync(file)) return
-  try {
-    const w = JSON.parse(readFileSync(file, 'utf8'))
-    writeFileSync(file, JSON.stringify({ ...w, sessions: [], layout: 'tabs' }, null, 2))
-  } catch {
-    /* a malformed file is the app's problem, not the harness's */
-  }
-}
-resetWorkspace()
-
 const PORT = 9222
-const OUT = process.argv[2] ?? 'smoke.png'
+const OUT = process.argv[2] ?? join(tmpdir(), 'terminal-buddy-smoke.png')
+const profile = mkdtempSync(join(tmpdir(), 'terminal-buddy-smoke-'))
+writeFileSync(join(profile, 'settings.json'), JSON.stringify({ desktopNotifications: false }))
 
 // BUDDY_EXE points the harness at a packaged build instead of the dev output.
 const packaged = process.env.BUDDY_EXE
 const electron =
   packaged ?? (process.platform === 'win32' ? 'node_modules/electron/dist/electron.exe' : 'node_modules/.bin/electron')
 const args = packaged
-  ? [`--remote-debugging-port=${PORT}`]
-  : ['./out/main/index.js', `--remote-debugging-port=${PORT}`]
+  ? [`--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`]
+  : ['./out/main/index.js', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`]
 
 const child = spawn(electron, args, {
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -224,6 +209,12 @@ try {
     check('status bridge accepts fleet updates', true, 'badge module bundled')
   }
 
+  // Terminals are the default; no transcript should cover live prompts.
+  await evaluate(`[...document.querySelectorAll('.seg button')].find(b => b.textContent === 'Grid')?.click()`)
+  await sleep(900)
+  await sleep(800)
+  check('live terminal is visible by default', await evaluate(`!document.querySelector('.agent') && !!document.querySelector('.xterm')`))
+
   // The bug this fixes: xterm treated Ctrl+V as the control byte 0x16 and
   // preventDefault()ed, so nothing was ever pasted. Drive a real key event and
   // confirm the shell echoes the clipboard back.
@@ -241,14 +232,6 @@ try {
   const echoed = await evaluate(`(() => { window.__off && window.__off(); return window.__acc })()`)
   check('Ctrl+V pastes into the terminal', String(echoed).includes('PASTE_PROBE_42'),
     pasted ? JSON.stringify(String(echoed).slice(-40)) : 'no terminal textarea')
-
-  // Click-to-position acts on the terminal, which now sits behind the
-  // conversation, so lift the lid before driving it.
-  await evaluate(`[...document.querySelectorAll('.seg button')].find(b => b.textContent === 'Grid')?.click()`)
-  await sleep(900)
-  await evaluate(`[...document.querySelectorAll('.cell-head .icon-btn')].find(b => b.textContent === '</>')?.click()`)
-  await sleep(800)
-  check('dev toggle reveals the terminal', await evaluate(`!document.querySelector('.agent') && !!document.querySelector('.xterm')`))
 
   // Click-to-position: type a line, click five cells back, insert a marker and
   // confirm it landed mid-string rather than at the end. `#` keeps PowerShell
@@ -343,6 +326,7 @@ try {
   }
   child.kill()
   await sleep(500)
+  rmSync(profile, { recursive: true, force: true })
   if (appLog.length) {
     console.log('\n--- app output ---')
     for (const [k, v] of appLog.slice(0, 20)) process.stdout.write(`[${k}] ${v}`)

@@ -59,9 +59,9 @@ export class TrayController {
   }
 
   private statusLine(): string {
-    if (this.total === 0) return 'Coop — nothing open'
-    if (this.waiting > 0) return `Coop — ${this.waiting} waiting on you`
-    return `Coop — ${this.total} card${this.total === 1 ? '' : 's'}, all quiet`
+    if (this.total === 0) return 'Terminal Buddy — nothing open'
+    if (this.waiting > 0) return `Terminal Buddy — ${this.waiting} need a look`
+    return `Terminal Buddy — ${this.total} card${this.total === 1 ? '' : 's'}, all quiet`
   }
 
   private refresh(): void {
@@ -73,8 +73,8 @@ export class TrayController {
       Menu.buildFromTemplate([
         { label: this.statusLine(), enabled: false },
         { type: 'separator' },
-        { label: 'Show Coop', click: () => this.hooks.onShow() },
-        { label: 'New terminal', click: () => this.hooks.onNewTerminal() },
+        { label: 'Show Terminal Buddy', click: () => this.hooks.onShow() },
+        { label: 'New chat or terminal…', click: () => this.hooks.onNewTerminal() },
         { label: 'Open folder…', click: () => this.hooks.onOpenFolder() },
         ...(recent.length
           ? [

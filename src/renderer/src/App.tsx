@@ -12,28 +12,55 @@ import { greeting } from './lib/copy'
 import { chime } from './lib/chime'
 import { drawBadge } from './lib/badge'
 import Buddy from './components/Buddy'
+import WorldView from './components/WorldView'
+import CloseSessionDialog from './components/CloseSessionDialog'
+import NewSessionDialog from './components/NewSessionDialog'
+import RestoreSessionDialog from './components/RestoreSessionDialog'
 
 export default function App(): React.JSX.Element {
   const ready = useStore((s) => s.ready)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const paletteOpen = useStore((s) => s.paletteOpen)
   const settingsOpen = useStore((s) => s.settingsOpen)
+  const newSessionOpen = useStore((s) => s.newSessionOpen)
+  const restoreItems = useStore((s) => s.restoreItems)
   const broadcast = useStore((s) => s.broadcast)
   const toast = useStore((s) => s.toast)
+  const layout = useStore((s) => s.layout)
   const settings = useStore((s) => s.settings)
   const waiting = useStore((s) => s.sessions.filter((x) => x.attention).length)
   const total = useStore((s) => s.sessions.length)
   const prevWaiting = useRef(0)
 
   const [searchOpen, setSearchOpen] = useState(false)
+  const [dockDrag, setDockDrag] = useState({ dragging: false, over: false })
   const [searchTerm, setSearchTerm] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     void useStore.getState().boot()
+    const save = (): void => useStore.getState().persistNow()
+    window.addEventListener('beforeunload', save)
+    return () => window.removeEventListener('beforeunload', save)
   }, [])
 
   // One pty bridge for every pane, rather than a listener per terminal.
+  useEffect(() => {
+    const offState = window.buddy.popout.onState((id, detached) => {
+      const handle = getTerm(id)
+      if (handle) handle.detached = detached
+      useStore.getState().patchSession(id, { detached })
+      if (!detached) {
+        useStore.getState().setActive(id)
+        if (useStore.getState().layout === 'world') useStore.getState().setLayout('tabs')
+      }
+    })
+    const offSize = window.buddy.popout.onSize((id, cols, rows) => getTerm(id)?.term.resize(cols, rows))
+    const offInput = window.buddy.popout.onInput((id) => useStore.getState().markInput(id))
+    const offDrag = window.buddy.popout.onDragging((dragging, over) => setDockDrag({ dragging, over }))
+    return () => { offState(); offSize(); offInput(); offDrag() }
+  }, [])
+
   useEffect(() => {
     const offData = window.buddy.pty.onData((id, data) => {
       writeTo(id, data)
@@ -44,6 +71,15 @@ export default function App(): React.JSX.Element {
       useStore.getState().markExit(id, code)
     })
     const offInfo = window.buddy.pty.onInfo((id, patch) => useStore.getState().patchSession(id, patch))
+    const offNotification = window.buddy.app.onSelectTerminal((id) => {
+      const s = useStore.getState()
+      if (!s.sessions.some((x) => x.id === id)) return s.notify('That terminal has already been closed.')
+      s.setActive(id)
+      s.setLocked(true)
+      if (s.layout === 'world') s.setLayout('tabs')
+      requestAnimationFrame(() => getTerm(id)?.term.focus())
+    })
+    const offNotificationError = window.buddy.app.onNotificationError((message) => useStore.getState().notify(message))
     const offProgress = window.buddy.catalog.onProgress((p) => useStore.setState({ scanProgress: p }))
     const offFolder = window.buddy.app.onOpenFolder((dir) => {
       void useStore.getState().openSession({ cwd: dir })
@@ -55,14 +91,14 @@ export default function App(): React.JSX.Element {
       useStore.setState((s) => ({ agents: { ...s.agents, [id]: agent } }))
     )
     const offNew = window.buddy.app.onNewTerminal(() => {
-      const s = useStore.getState()
-      const active = s.sessions.find((x) => x.id === s.activeId)
-      void window.buddy.app.paths().then((p) => s.openSession({ cwd: active?.cwd ?? p.home }))
+      useStore.getState().setNewSessionOpen(true)
     })
     return () => {
       offData()
       offExit()
       offInfo()
+      offNotification()
+      offNotificationError()
       offProgress()
       offFolder()
       offFeed()
@@ -90,6 +126,7 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      if (useStore.getState().pendingCloseId || useStore.getState().newSessionOpen || useStore.getState().restoreItems || useStore.getState().restoring) return
       if (e.key === 'Escape' && searchOpen) {
         setSearchOpen(false)
         const id = useStore.getState().activeId
@@ -122,8 +159,7 @@ export default function App(): React.JSX.Element {
 
       switch (hit) {
         case 'new': {
-          const active = s.sessions.find((x) => x.id === s.activeId)
-          void window.buddy.app.paths().then((p) => s.openSession({ cwd: active?.cwd ?? p.home }))
+          s.setNewSessionOpen(true)
           break
         }
         case 'duplicate': {
@@ -140,9 +176,11 @@ export default function App(): React.JSX.Element {
         case 'prev':
           s.cycle(-1)
           break
-        case 'layout':
-          s.setLayout(s.layout === 'tabs' ? 'grid' : 'tabs')
+        case 'layout': {
+          const order = ['tabs', 'grid', 'world'] as const
+          s.setLayout(order[(order.indexOf(s.layout) + 1) % order.length])
           break
+        }
         case 'sidebar':
           s.setSidebar(!s.sidebarOpen)
           break
@@ -157,7 +195,7 @@ export default function App(): React.JSX.Element {
           break
         case 'lock':
           s.setLocked(!s.locked)
-          s.notify(s.locked ? 'Layout unlocked — drag panes to rearrange.' : 'Layout locked.')
+          s.notify(s.locked ? 'Unlocked — drag panes to move; drag grid dividers to resize.' : 'Layout locked.')
           break
         case 'search':
           setSearchOpen(true)
@@ -190,13 +228,20 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <div className={`app ${broadcast ? 'is-broadcast' : ''} ${settings.reduceMotion ? 'no-motion' : ''}`}>
+    <div
+      className={`app ${layout === 'world' ? 'is-world' : ''} ${broadcast ? 'is-broadcast' : ''} ${settings.reduceMotion ? 'no-motion' : ''}`}
+    >
       <TopBar />
       <div className="body">
         {sidebarOpen && <Sidebar />}
         <main className="main">
-          <TabBar />
+          {layout !== 'world' && <TabBar />}
+          {/*
+            The terminal area stays mounted in world view so every xterm keeps
+            its size and scrollback; the world simply covers it.
+          */}
           <TerminalArea />
+          {layout === 'world' && <WorldView />}
           {searchOpen && (
             <div className="findbar">
               <input
@@ -227,6 +272,10 @@ export default function App(): React.JSX.Element {
       {broadcast && <div className="broadcast-strip">Broadcast on — every keystroke goes to all terminals</div>}
       {paletteOpen && <Palette />}
       {settingsOpen && <SettingsPanel />}
+      <CloseSessionDialog />
+      {newSessionOpen && <NewSessionDialog />}
+      {restoreItems && <RestoreSessionDialog items={restoreItems} />}
+      {dockDrag.dragging && <div className={`dock-target ${dockDrag.over ? 'is-over' : ''}`}>Drop here to dock your terminal back</div>}
       {toast && <div className="toast">{toast}</div>}
     </div>
   )

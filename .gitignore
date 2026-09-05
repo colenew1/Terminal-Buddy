@@ -8,6 +8,13 @@ release/
 Thumbs.db
 *.tsbuildinfo
 
+# Local credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
 # generated at package time
 build/icon.ico
 smoke.png

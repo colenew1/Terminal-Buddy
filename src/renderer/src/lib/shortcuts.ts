@@ -94,7 +94,7 @@ export const SHORTCUT_HELP: [string, string][] = [
   ['Ctrl+Shift+C / Ctrl+Shift+V', 'Copy / paste (also works)'],
   ['Right-click', 'Copy selection, or paste when nothing is selected'],
   ['Ctrl+Shift+L', 'Lock / unlock the layout for rearranging'],
-  ['Ctrl+Shift+T', 'New terminal'],
+  ['Ctrl+Shift+T', 'Choose a new chat or terminal'],
   ['Ctrl+Shift+D', 'Duplicate terminal (same folder)'],
   ['Ctrl+Shift+W', 'Close terminal'],
   ['Ctrl+Tab / Ctrl+Shift+Tab', 'Next / previous terminal'],

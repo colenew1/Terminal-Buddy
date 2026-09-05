@@ -10,15 +10,17 @@ import { fitOne, register, unregister, get as getTerm } from '../lib/terminals'
 import { matchShortcut, matchClipboard } from '../lib/shortcuts'
 import { themeById } from '../lib/themes'
 import { arrowsFor, computeClickDelta } from '../lib/cursor'
+import { isTerminalReply } from '@shared/terminal-protocol'
 
 
 
 interface Props {
   session: Session
   visible: boolean
+  interactive: boolean
 }
 
-export default function TerminalPane({ session, visible }: Props): React.JSX.Element {
+export default function TerminalPane({ session, visible, interactive }: Props): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const id = session.id
 
@@ -65,9 +67,16 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
     register(id, { term, fit, search, container: host })
 
     term.onData((data) => {
+      if (getTerm(id)?.detached || isTerminalReply(data)) return
+      // xterm also emits terminal-protocol replies. Those are not user input.
+      const userInput = /^[^\x00-\x1f\x7f]/.test(data) || data === '\r' || data.startsWith('\x1b[200~')
       if (useStore.getState().broadcast) {
-        for (const s of useStore.getState().sessions) window.buddy.pty.write(s.id, data)
+        for (const s of useStore.getState().sessions) {
+          if (userInput) useStore.getState().markInput(s.id)
+          window.buddy.pty.write(s.id, data, true)
+        }
       } else {
+        if (userInput) useStore.getState().markInput(id)
         window.buddy.pty.write(id, data)
       }
     })
@@ -116,7 +125,6 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
 
     const initialFit = (): void => {
       fitOne(id)
-      term.focus()
     }
     requestAnimationFrame(initialFit)
     // Web fonts settle a frame or two late; refit once they have.
@@ -181,12 +189,16 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
       h.term.clearSelection()
     } else {
       const text = await window.buddy.clipboard.read()
-      if (text) window.buddy.pty.write(id, text)
+      if (text) {
+        useStore.getState().markInput(id)
+        h.term.paste(text)
+      }
     }
   }
 
   return (
     <div
+      inert={!interactive}
       className={`pane ${visible ? 'is-visible' : 'is-hidden'} ${session.status === 'exited' ? 'is-exited' : ''}`}
       onMouseDown={() => useStore.getState().locked && setActive(id)}
       onContextMenu={onContextMenu}

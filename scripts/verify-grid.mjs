@@ -1,35 +1,22 @@
 /** Opens several terminals, switches to grid, and checks every pane is real. */
 import { spawn } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
-/**
- * Start from a clean workspace. Terminals, spans and layout all persist, so
- * without this a previous run's saved state leaks into the next one's
- * assertions - and the suite leaves the user's app full of stray panes.
- */
-function resetWorkspace() {
-  const file = join(process.env.APPDATA ?? '', 'terminal-buddy', 'workspace.json')
-  if (!existsSync(file)) return
-  try {
-    const w = JSON.parse(readFileSync(file, 'utf8'))
-    writeFileSync(file, JSON.stringify({ ...w, sessions: [], layout: 'tabs' }, null, 2))
-  } catch {
-    /* a malformed file is the app's problem, not the harness's */
-  }
-}
-resetWorkspace()
-
 const PORT = 9224
-const OUT = process.argv[2] ?? 'grid.png'
+const OUT = process.argv[2] ?? join(tmpdir(), 'terminal-buddy-grid.png')
 const WANT = 6
+const profile = mkdtempSync(join(tmpdir(), 'terminal-buddy-grid-'))
+writeFileSync(join(profile, 'settings.json'), JSON.stringify({ desktopNotifications: false }))
 
 const exe = process.env.BUDDY_EXE
 const bin = exe ?? (process.platform === 'win32' ? 'node_modules/electron/dist/electron.exe' : 'node_modules/.bin/electron')
-const args = exe ? [`--remote-debugging-port=${PORT}`] : ['./out/main/index.js', `--remote-debugging-port=${PORT}`]
+const args = exe
+  ? [`--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`]
+  : ['./out/main/index.js', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`]
 const child = spawn(bin, args, { stdio: 'ignore' })
 
 let exitedEarly = null
@@ -54,6 +41,15 @@ function send(method, params = {}) {
     setTimeout(() => pending.delete(id) && rej(new Error(method + ' timeout')), 40000)
   })
 }
+async function newTerminal(selector = '.tab-new') {
+  await ev(`document.querySelector(${JSON.stringify(selector)}).click()`)
+  for (let i=0;i<60;i++) {
+    if (await ev(`!!document.querySelector('[data-new-kind="shell"]:not(:disabled)')`)) break
+    await sleep(50)
+  }
+  await ev(`document.querySelector('[data-new-kind="shell"]').click()`)
+}
+
 async function ev(expression) {
   const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'eval failed')
@@ -106,7 +102,7 @@ try {
 
   const start = await ev(`document.querySelectorAll('.tab').length`)
   for (let i = start; i < WANT; i++) {
-    await ev(`document.querySelector('.tab-new').click()`)
+    await newTerminal()
     await sleep(900)
   }
   const tabs = await ev(`document.querySelectorAll('.tab').length`)
@@ -139,14 +135,14 @@ try {
   const hues = await ev(`[...document.querySelectorAll('.tab')].map(t => t.style.getPropertyValue('--critter'))`)
   check('critters carry distinct hues', new Set(hues).size === hues.length && hues.every(Boolean))
 
-  // Every shell printed a prompt and then fell silent, so the inactive panes
-  // should have tripped the attention badge.
+  // A shell prompt going quiet is normal. It must not masquerade as an agent
+  // asking for the user's attention.
   await sleep(2500)
   const badges = await ev(`document.querySelectorAll('.dot.attention').length`)
-  check('attention badges fire on quiet panes', badges > 0, `${badges} flagged`)
+  check('plain shell prompts do not ask for attention', badges === 0, `${badges} flagged`)
 
   const mood = await ev(`document.querySelector('.buddy')?.className ?? ''`)
-  check('buddy reacts to panes needing you', mood.includes('buddy-alert'), mood)
+  check('buddy stays calm for plain shells', !mood.includes('buddy-alert'), mood)
 
   // Lock/unlock and drag-to-swap.
   const before = await ev(`[...document.querySelectorAll('.tab-critter')].map(e => e.textContent)`)
@@ -224,26 +220,21 @@ try {
   await ev(`document.querySelectorAll('.topbar .icon-btn')[0].click()`)
   await sleep(700)
 
-  // Resizing: drag the corner handle right and down by one cell each.
+  // A short, real mouse drag must resize neighboring columns immediately.
   await ev(`[...document.querySelectorAll('.topbar .icon-btn')].find(b => b.textContent === '🔒')?.click()`)
-  await sleep(700)
+  await sleep(400)
   const handle = await ev(`(() => {
-    const h = document.querySelector('.cell-resize')
-    if (!h) return null
+    const h = document.querySelector('.grid-divider.is-vertical span')
     const r = h.getBoundingClientRect()
-    const cell = h.closest('.cell').getBoundingClientRect()
-    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), w: Math.round(cell.width), h: Math.round(cell.height) }
+    return {x:r.x+r.width/2,y:r.y+r.height/2,w:document.querySelector('.cell').getBoundingClientRect().width}
   })()`)
-  if (handle) {
-    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: handle.x, y: handle.y, button: 'left', clickCount: 1, pointerType: 'mouse' })
-    await sleep(120)
-    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: handle.x + handle.w, y: handle.y + handle.h, button: 'left', buttons: 1, pointerType: 'mouse' })
-    await sleep(300)
-    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: handle.x + handle.w, y: handle.y + handle.h, button: 'left', clickCount: 1, pointerType: 'mouse' })
-    await sleep(600)
-  }
-  const size = await ev(`document.querySelector('.shield-size')?.textContent ?? ''`)
-  check('dragging the corner resizes a pane', size === '2×2', `1×1 -> ${size || 'unknown'}`)
+  await send('Input.dispatchMouseEvent',{type:'mousePressed',x:handle.x,y:handle.y,button:'left',clickCount:1})
+  await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:handle.x+24,y:handle.y,button:'left',buttons:1})
+  await sleep(200)
+  const width = await ev(`document.querySelector('.cell').getBoundingClientRect().width`)
+  check('a short divider drag resizes continuously before release',Math.abs(width-handle.w-24)<2,`24px drag -> ${Math.round(width-handle.w)}px resize`)
+  await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:handle.x+24,y:handle.y,button:'left',clickCount:1})
+  await sleep(500)
 
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(OUT, Buffer.from(shot.data, 'base64'))
@@ -260,6 +251,7 @@ try {
   }
   child.kill()
   await sleep(500)
+  rmSync(profile, { recursive: true, force: true })
   console.log(failures ? `\n${failures} failed` : '\nall grid checks passed')
   process.exit(failures ? 1 : 0)
 }

@@ -279,6 +279,7 @@ export default function Sidebar(): React.JSX.Element {
                 onClick={() => {
                   const { activeId } = useStore.getState()
                   if (!activeId) return notify('Open a terminal first.')
+                  useStore.getState().markInput(activeId)
                   window.buddy.pty.write(activeId, `/${skillDetail.name}`)
                   setSkillDetail(null)
                 }}

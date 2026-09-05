@@ -25,6 +25,15 @@ function send(method, params = {}) {
     setTimeout(() => pending.delete(id) && rej(new Error(method + ' timeout')), 40000)
   })
 }
+async function newTerminal(selector = '.tab-new') {
+  await ev(`document.querySelector(${JSON.stringify(selector)}).click()`)
+  for (let i=0;i<60;i++) {
+    if (await ev(`!!document.querySelector('[data-new-kind="shell"]:not(:disabled)')`)) break
+    await sleep(50)
+  }
+  await ev(`document.querySelector('[data-new-kind="shell"]').click()`)
+}
+
 async function ev(expression) {
   const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'eval failed')
@@ -69,7 +78,7 @@ try {
   // Several panes, so the critters have something to distinguish.
   const have = await ev(`document.querySelectorAll('.tab').length`)
   for (let i = have; i < 5; i++) {
-    await ev(`document.querySelector('.tab-new').click()`)
+    await newTerminal()
     await sleep(800)
   }
   // Let the shells fall quiet so the buddy goes to 'alert'.

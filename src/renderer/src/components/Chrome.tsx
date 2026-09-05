@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore'
 import { shortPath } from '../lib/format'
 import { fleetStatus } from '../lib/copy'
 import Buddy, { type Mood } from './Buddy'
+import { beginTerminalDrag } from '../lib/terminal-drag'
 
 /** Fleet state, condensed to one of the buddy's four faces. */
 export function useMood(): { mood: Mood; busy: number; waiting: number; total: number } {
@@ -46,7 +47,7 @@ export function TopBar(): React.JSX.Element {
             }
           }}
         />
-        <span className="brand-name">Coop</span>
+        <span className="brand-name">Terminal Buddy</span>
         <span className={`brand-status ${waiting ? 'is-waiting' : ''}`}>{status}</span>
       </div>
 
@@ -76,21 +77,30 @@ export function TopBar(): React.JSX.Element {
           >
             Grid
           </button>
+          <button
+            className={layout === 'world' ? 'is-on' : ''}
+            title="World — every agent as a creature (Ctrl+Shift+G)"
+            onClick={() => setLayout('world')}
+          >
+            World
+          </button>
         </div>
-        <button
-          className={`icon-btn ${locked ? '' : 'is-warn'}`}
-          title={
-            locked
-              ? 'Layout locked - click to unlock and rearrange panes (Ctrl+Shift+L)'
-              : 'Layout unlocked - drag panes to swap them. Click to lock (Ctrl+Shift+L)'
-          }
-          onClick={() => {
-            setLocked(!locked)
-            notify(locked ? 'Layout unlocked — drag panes to rearrange.' : 'Layout locked.')
-          }}
-        >
-          {locked ? '🔒' : '🔓'}
-        </button>
+        {layout !== 'world' && (
+          <button
+            className={`icon-btn ${locked ? '' : 'is-warn'}`}
+            title={
+              locked
+                ? 'Layout locked - click to unlock and rearrange panes (Ctrl+Shift+L)'
+                : 'Layout unlocked - drag panes to move, or grid dividers to resize. Click to lock (Ctrl+Shift+L)'
+            }
+            onClick={() => {
+              setLocked(!locked)
+              notify(locked ? 'Unlocked — drag panes to move; drag grid dividers to resize.' : 'Layout locked.')
+            }}
+          >
+            {locked ? '🔒' : '🔓'}
+          </button>
+        )}
         <button
           className={`icon-btn ${broadcast ? 'is-danger' : ''}`}
           title="Broadcast typing to every terminal (Ctrl+Shift+B)"
@@ -111,19 +121,10 @@ export function TabBar(): React.JSX.Element {
   const activeId = useStore((s) => s.activeId)
   const setActive = useStore((s) => s.setActive)
   const closeSession = useStore((s) => s.closeSession)
-  const openSession = useStore((s) => s.openSession)
+  const setNewSessionOpen = useStore((s) => s.setNewSessionOpen)
   const renameSession = useStore((s) => s.renameSession)
   const settings = useStore((s) => s.settings)
-  const moveSession = useStore((s) => s.moveSession)
   const [editing, setEditing] = useState<string | null>(null)
-  const [dragFrom, setDragFrom] = useState<number | null>(null)
-  const [dragOver, setDragOver] = useState<number | null>(null)
-
-  const newTerminal = async (): Promise<void> => {
-    const active = sessions.find((s) => s.id === activeId)
-    const paths = await window.buddy.app.paths()
-    void openSession({ cwd: active?.cwd ?? paths.home, shellId: settings.defaultShellId })
-  }
 
   return (
     <div className="tabbar">
@@ -131,27 +132,10 @@ export function TabBar(): React.JSX.Element {
         {sessions.map((s, i) => (
           <div
             key={s.id}
-            className={`tab ${s.id === activeId ? 'is-active' : ''} ${s.status === 'exited' ? 'is-exited' : ''} ${s.attention ? 'wants-you' : ''} ${dragOver === i && dragFrom !== i ? 'is-drop-target' : ''}`}
-            draggable={editing !== s.id}
-            onDragStart={(e) => {
-              setDragFrom(i)
-              e.dataTransfer.effectAllowed = 'move'
-            }}
-            onDragOver={(e) => {
-              e.preventDefault()
-              e.dataTransfer.dropEffect = 'move'
-              setDragOver(i)
-            }}
-            onDrop={(e) => {
-              e.preventDefault()
-              if (dragFrom !== null && dragFrom !== i) moveSession(dragFrom, i)
-              setDragFrom(null)
-              setDragOver(null)
-            }}
-            onDragEnd={() => {
-              setDragFrom(null)
-              setDragOver(null)
-            }}
+            data-session-id={s.id}
+            onPointerDown={(event) => { if (editing !== s.id) beginTerminalDrag(event, s.id) }}
+            className={`tab ${s.id === activeId ? 'is-active' : ''} ${s.status === 'exited' ? 'is-exited' : ''} ${s.attention ? 'wants-you' : ''}`}
+            draggable={false}
             style={settings.critters ? { ['--critter' as string]: `hsl(${s.critter.hue} 70% 62%)` } : undefined}
             onMouseDown={() => setActive(s.id)}
             onDoubleClick={() => setEditing(s.id)}
@@ -182,6 +166,8 @@ export function TabBar(): React.JSX.Element {
             {s.attention && <span className="dot attention" title="Went quiet — probably waiting on you" />}
             {!s.attention && s.unseen && <span className="dot unseen" title="New output" />}
             {s.status === 'exited' && <span className="tab-dead">exited</span>}
+            <button className="tab-close" data-popout={s.id} title={s.detached ? 'Show popped-out terminal' : 'Pop out terminal'}
+              onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); void useStore.getState().detachSession(s.id) }}>↗</button>
             <button
               className="tab-close"
               title="Close (Ctrl+Shift+W)"
@@ -195,7 +181,7 @@ export function TabBar(): React.JSX.Element {
             </button>
           </div>
         ))}
-        <button className="tab-new" title="New terminal (Ctrl+Shift+T)" onClick={newTerminal}>
+        <button className="tab-new" title="New chat or terminal… (Ctrl+Shift+T)" aria-label="New chat or terminal" onClick={() => setNewSessionOpen(true)}>
           +
         </button>
       </div>

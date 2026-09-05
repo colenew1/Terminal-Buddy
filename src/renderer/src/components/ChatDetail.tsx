@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { ChatEntry, ChatTranscript } from '@shared/types'
+import { useEffect } from 'react'
+import type { ChatEntry } from '@shared/types'
 import { useStore } from '../store/useStore'
 import { bytes, timeAgo } from '../lib/format'
 import { resumeChat, resumeCommandFor } from '../lib/commands'
@@ -10,26 +10,7 @@ interface Props {
 }
 
 export default function ChatDetail({ entry, onClose }: Props): React.JSX.Element {
-  const [data, setData] = useState<ChatTranscript | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const notify = useStore((s) => s.notify)
-
-  useEffect(() => {
-    let alive = true
-    setData(null)
-    setError(null)
-    window.buddy.catalog
-      .transcript(entry)
-      .then((t) => {
-        if (alive) setData(t)
-      })
-      .catch((e: Error) => {
-        if (alive) setError(e.message)
-      })
-    return () => {
-      alive = false
-    }
-  }, [entry])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -63,17 +44,9 @@ export default function ChatDetail({ entry, onClose }: Props): React.JSX.Element
           </button>
         </div>
 
-        <div className="modal-body transcript">
-          {error && <div className="hint error">Could not read the transcript: {error}</div>}
-          {!data && !error && <div className="hint">Reading transcript…</div>}
-          {data?.turns.length === 0 && <div className="hint">No readable messages in this file.</div>}
-          {data?.turns.map((t, i) => (
-            <div key={i} className={`turn ${t.role}`}>
-              <div className="turn-role">{t.role === 'user' ? 'You' : entry.agent}</div>
-              <div className="turn-text">{t.text}</div>
-            </div>
-          ))}
-          {data?.truncated && <div className="hint">Transcript truncated for display.</div>}
+        <div className="modal-body">
+          <p>{entry.preview || 'Resume this saved chat in a live terminal.'}</p>
+          <p className="hint">Messages, questions, and approvals stay in the agent's terminal. Export Markdown if you need a readable history file.</p>
         </div>
 
         <div className="modal-foot">

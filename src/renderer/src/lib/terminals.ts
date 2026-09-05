@@ -7,6 +7,7 @@ export interface TermHandle {
   fit: FitAddon
   search: SearchAddon
   container: HTMLElement
+  detached?: boolean
 }
 
 /**
@@ -49,7 +50,7 @@ export function writeTo(id: string, data: string): void {
 
 /** Send the same keystrokes to every live pty (broadcast mode). */
 export function broadcastInput(data: string): void {
-  for (const id of registry.keys()) window.buddy.pty.write(id, data)
+  for (const id of registry.keys()) window.buddy.pty.write(id, data, true)
 }
 
 /**
@@ -59,7 +60,7 @@ export function broadcastInput(data: string): void {
  */
 export function fitOne(id: string): void {
   const h = registry.get(id)
-  if (!h) return
+  if (!h || h.detached) return
   const el = h.container
   if (!el || el.offsetWidth < 20 || el.offsetHeight < 20) return
   try {

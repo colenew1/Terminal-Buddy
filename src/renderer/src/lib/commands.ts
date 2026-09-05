@@ -21,12 +21,16 @@ export function skillLaunchCommand(entry: SkillEntry): string {
 }
 
 /** Opens a fresh terminal in the chat's folder and resumes it there. */
-export async function resumeChat(entry: ChatEntry): Promise<void> {
-  const { openSession, notify } = useStore.getState()
+export async function resumeChat(entry: ChatEntry, replaceId?: string): Promise<string | null> {
+  const { openSession, replaceEmptySession, notify } = useStore.getState()
   if (!entry.cwd) notify('That chat has no recorded folder — opening in your home directory.')
-  await openSession({
+  const spec = {
     cwd: entry.cwd,
     title: entry.title.slice(0, 28),
-    initialCommand: resumeCommandFor(entry)
-  })
+    initialCommand: resumeCommandFor(entry),
+    agent: entry.agent,
+    transcript: { agent: entry.agent, path: entry.path },
+    resume: { agent: entry.agent, id: entry.id, path: entry.path }
+  }
+  return replaceId ? replaceEmptySession(replaceId, spec) : openSession(spec)
 }

@@ -40,6 +40,7 @@ export interface DropVerdict {
  * block on a guess.
  */
 export function canDrop(item: DragItem, session: Session, running: Agent | null | undefined): DropVerdict {
+  if (session.detached) return { ok: false, reason: 'Dock this terminal back before dropping a chat or skill here.' }
   if (session.status === 'exited') {
     return { ok: false, reason: 'That terminal has exited' }
   }
@@ -47,9 +48,11 @@ export function canDrop(item: DragItem, session: Session, running: Agent | null 
   const agent = item.kind === 'chat' ? item.entry.agent : item.entry.agent
 
   if (item.kind === 'chat') {
-    // Resuming shells out, so it needs a prompt rather than a live agent.
-    if (running) return { ok: false, reason: `Already running ${running} — drop on an idle terminal` }
-    return { ok: true, reason: `Resume this ${agent} chat here` }
+    if (session.replacing) return { ok: false, reason: 'Opening a chat here already' }
+    if (session.hasConversation || session.hasInput) {
+      return { ok: false, reason: 'This pane has a conversation or unsent input. Use a new terminal.' }
+    }
+    return { ok: true, reason: `Replace this empty pane with ${agent} chat “${item.entry.title}”` }
   }
 
   if (running && running !== agent) {

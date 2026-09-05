@@ -110,7 +110,7 @@ export default function SettingsPanel(): React.JSX.Element {
             </label>
 
             <label className="field">
-              <span>Reopen terminals on launch</span>
+              <span>Ask to reopen chats on launch<small>Restore linked conversations, terminal folders, names, and layout.</small></span>
               <input
                 type="checkbox"
                 checked={settings.restoreOnLaunch}
@@ -136,7 +136,7 @@ export default function SettingsPanel(): React.JSX.Element {
             <label className="field">
               <span>
                 Attention delay (ms)
-                <small>How long a pane must be quiet after output before it is flagged.</small>
+                <small>How long an identified agent must be quiet after output before it is flagged.</small>
               </span>
               <input
                 type="number"
@@ -200,23 +200,8 @@ export default function SettingsPanel(): React.JSX.Element {
 
             <label className="field">
               <span>
-                Developer mode
-                <small>
-                  Shows the raw terminal in every pane instead of the conversation. Individual cards have a
-                  &lt;/&gt; button for the same thing.
-                </small>
-              </span>
-              <input
-                type="checkbox"
-                checked={settings.devMode}
-                onChange={(e) => void setSettings({ devMode: e.target.checked })}
-              />
-            </label>
-
-            <label className="field">
-              <span>
                 Chime when a terminal wants you
-                <small>Two soft notes. Nothing else makes a sound.</small>
+                <small>Two soft in-app notes, independent of Windows notification sounds.</small>
               </span>
               <input
                 type="checkbox"
@@ -224,6 +209,12 @@ export default function SettingsPanel(): React.JSX.Element {
                 onChange={(e) => void setSettings({ chime: e.target.checked })}
               />
             </label>
+
+            <label className="field">
+              <span>Desktop notifications<small>Alert after 8 seconds without output following terminal input, or when its process exits. Quiet means it may be done or waiting, not confirmed completion. Repeated pauses are limited to one alert per terminal every 30 seconds.</small></span>
+              <input type="checkbox" checked={settings.desktopNotifications} onChange={(e) => void setSettings({ desktopNotifications: e.target.checked })} />
+            </label>
+            <button className="btn tiny" onClick={() => void window.buddy.app.testNotification().then((r) => notify(r.message)).catch(() => notify('Windows could not display the test notification.'))}>Send test desktop alert</button>
 
             <label className="field">
               <span>
@@ -298,7 +289,7 @@ export default function SettingsPanel(): React.JSX.Element {
             <label className="field">
               <span>
                 Notification area icon
-                <small>Keeps Coop reachable while the window is closed.</small>
+                <small>Keeps Terminal Buddy reachable while the window is closed.</small>
               </span>
               <input
                 type="checkbox"

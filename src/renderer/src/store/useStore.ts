@@ -7,8 +7,10 @@ import {
   type SessionSpec,
   type Settings,
   type FeedEvent,
+  type Pos,
   type ShellDef,
-  type Span
+  type Span,
+  type ResumeRef, type RestoreItem, type PersistedSession, type Workspace
 } from '@shared/types'
 import { pickCritter, findCritter, type Critter } from '../lib/critters'
 import { applyTheme } from '../lib/themes'
@@ -30,6 +32,23 @@ export interface Session {
   critter: Critter
   /** Grid footprint in cells. Only meaningful in grid view. */
   span: Span
+  /** Where this bubble sits in the world view. */
+  pos: Pos
+  hasInput: boolean
+  hasConversation: boolean
+  replacing: boolean
+  resume?: ResumeRef
+  detached?: boolean
+}
+
+/** What a session has actually been reaching for, counted from its transcript. */
+export interface ToolStat {
+  key: string
+  label: string
+  count: number
+  lastAt: number
+  /** Set when the tool came from an MCP server, naming the server. */
+  mcp: string | null
 }
 
 export type SidebarTab = 'chats' | 'skills' | 'projects'
@@ -40,13 +59,20 @@ interface State {
   settings: Settings
   sessions: Session[]
   activeId: string | null
+  pendingCloseId: string | null
   layout: LayoutMode
+  gridSizes: { columns: number[]; rows: number[] }
+  restoreItems: RestoreItem[] | null
+  restoring: boolean
+  unrestoredSessions: PersistedSession[]
+  restoreActiveIndex: number
 
   sidebarOpen: boolean
   sidebarTab: SidebarTab
   sidebarWidth: number
   paletteOpen: boolean
   settingsOpen: boolean
+  newSessionOpen: boolean
   broadcast: boolean
   /** Locked means panes take input; unlocked means you can drag them around. */
   locked: boolean
@@ -54,8 +80,8 @@ interface State {
   agents: Record<string, 'claude' | 'codex' | null>
   /** Live conversation per pane, tailed from the agent's own transcript. */
   feeds: Record<string, FeedEvent[]>
-  /** Panes showing the raw terminal rather than the conversation. */
-  rawPanes: Record<string, boolean>
+  /** Tools and MCP servers each pane has touched, most recent first. */
+  toolStats: Record<string, ToolStat[]>
 
   catalog: Catalog | null
   catalogLoading: boolean
@@ -65,9 +91,12 @@ interface State {
 }
 
 interface Actions {
+  detachSession: (id: string, point?: Pos) => Promise<void>
   boot: () => Promise<void>
   openSession: (spec: SessionSpec) => Promise<string | null>
-  closeSession: (id: string) => void
+  replaceEmptySession: (id: string, spec: SessionSpec) => Promise<string | null>
+  markInput: (id: string) => void
+  closeSession: (id: string, confirmed?: boolean) => void
   setActive: (id: string) => void
   cycle: (dir: 1 | -1) => void
   jumpTo: (index: number) => void
@@ -76,10 +105,10 @@ interface Actions {
   swapSessions: (a: string, b: string) => void
   moveSession: (from: number, to: number) => void
   setSpan: (id: string, span: Span) => void
+  setGridSizes: (axis: 'columns' | 'rows', weights: number[]) => void
+  setPos: (id: string, pos: Pos) => void
   refreshAgents: () => Promise<void>
   addFeedEvents: (id: string, events: FeedEvent[]) => void
-  toggleRaw: (id: string) => void
-  send: (id: string, text: string) => void
   setLayout: (m: LayoutMode) => void
   markData: (id: string) => void
   markExit: (id: string, code: number) => void
@@ -91,34 +120,60 @@ interface Actions {
   setSidebarWidth: (w: number) => void
   setPalette: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
+  setNewSessionOpen: (open: boolean) => void
   toggleBroadcast: () => void
 
   loadCatalog: (force?: boolean) => Promise<void>
   notify: (msg: string) => void
   persist: () => void
+  persistNow: () => void
+  restoreSelected: (indexes: number[]) => Promise<void>
+  startFresh: () => Promise<void>
+  findSavedChats: () => void
+}
+
+/** Lay new bubbles out on a loose spiral so they never open on top of each other. */
+function scatter(index: number): Pos {
+  const golden = 2.399963
+  const a = index * golden
+  const r = 90 + 46 * Math.sqrt(index)
+  return { x: Math.round(520 + Math.cos(a) * r), y: Math.round(360 + Math.sin(a) * r) }
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 
 export const useStore = create<State & Actions>((set, get) => ({
+  async detachSession(id, point) {
+    const session = get().sessions.find((s) => s.id === id)
+    if (!session || session.replacing || get().restoreItems) return
+    try { await window.buddy.popout.open(id, point) }
+    catch (error) { get().notify('Could not pop out terminal: ' + (error as Error).message) }
+  },
   ready: false,
   shells: [],
   settings: DEFAULT_SETTINGS,
   sessions: [],
   activeId: null,
+  pendingCloseId: null,
   layout: 'tabs',
+  gridSizes: { columns: [], rows: [] },
+  restoreItems: null,
+  restoring: false,
+  unrestoredSessions: [],
+  restoreActiveIndex: 0,
 
   sidebarOpen: false,
   sidebarTab: 'chats',
   sidebarWidth: 380,
   paletteOpen: false,
   settingsOpen: false,
+  newSessionOpen: false,
   broadcast: false,
   // Always starts locked: a stray drag mid-session should never rearrange work.
   locked: true,
   agents: {},
   feeds: {},
-  rawPanes: {},
+  toolStats: {},
 
   catalog: null,
   catalogLoading: false,
@@ -143,24 +198,24 @@ export const useStore = create<State & Actions>((set, get) => ({
       shells,
       settings: { ...settings, defaultShellId },
       layout: workspace.layout ?? settings.layout,
-      ready: true
+      gridSizes: workspace.gridSizes ?? { columns: [], rows: [] }
     })
 
-    if (settings.restoreOnLaunch && workspace.sessions.length) {
-      for (const s of workspace.sessions) {
-        await get().openSession({
-          cwd: s.cwd,
-          shellId: s.shellId,
-          title: s.title,
-          critter: s.critter,
-          span: s.span
-        })
-      }
+    const previous = [...workspace.sessions, ...(workspace.unrestoredSessions ?? [])]
+    if (settings.restoreOnLaunch && previous.length) {
+      let restoreItems: RestoreItem[]
+      try { restoreItems = await window.buddy.workspace.prepareRestore(previous) }
+      catch { restoreItems = previous.map((session, index) => ({ session, index, available: false, description: 'Could not check this saved session. Try Saved chats.' })) }
+      set({ ready: true, restoreItems, restoreActiveIndex: workspace.activeIndex ?? 0 })
+      void get().loadCatalog()
+      return
     }
     if (get().sessions.length === 0) {
       const paths = await window.buddy.app.paths()
       await get().openSession({ cwd: paths.home })
     }
+    set({ ready: true })
+    get().persist()
     void get().loadCatalog()
   },
 
@@ -181,14 +236,19 @@ export const useStore = create<State & Actions>((set, get) => ({
         ...info,
         critter,
         span: spec.span ?? { cols: 1, rows: 1 },
+        pos: spec.pos ?? scatter(sessions.length),
         status: 'running',
         lastDataAt: 0,
         busy: false,
         attention: false,
-        unseen: false
+        unseen: false,
+        hasInput: !!spec.initialCommand, hasConversation: !!spec.transcript, replacing: false,
+        resume: info.resume ?? spec.resume
       }
-      set((s) => ({ sessions: [...s.sessions, session], activeId: info.id }))
-      window.buddy.feed.attach(info.id, info.cwd)
+      set((s) => ({ sessions: [...s.sessions, session], activeId: info.id,
+        unrestoredSessions: s.unrestoredSessions.filter((old) => !session.resume || old.resume?.id !== session.resume.id || old.resume?.agent !== session.resume.agent),
+        agents: { ...s.agents, [info.id]: spec.agent ?? spec.transcript?.agent ?? null } }))
+      window.buddy.feed.attach(info.id, info.cwd, session.resume ? { agent: session.resume.agent, path: session.resume.path } : spec.transcript)
       get().persist()
       return info.id
     } catch (e) {
@@ -197,27 +257,87 @@ export const useStore = create<State & Actions>((set, get) => ({
     }
   },
 
-  closeSession(id) {
+  async replaceEmptySession(id, spec) {
+    const empty = (s: Session): boolean => !s.hasConversation && !s.hasInput && !s.replacing
+    const original = get().sessions.find((s) => s.id === id)
+    if (!original || !empty(original)) {
+      get().notify('This pane has a conversation or unsent input. Open the chat in a new terminal.')
+      return null
+    }
+    get().patchSession(id, { replacing: true })
+    try {
+      // Spawn first so failure leaves the original pane and process intact.
+      const info = await window.buddy.pty.create({ ...spec, shellId: original.shellId })
+      const current = get().sessions.find((s) => s.id === id)
+      if (!current || !empty({ ...current, replacing: false })) {
+        window.buddy.pty.kill(info.id)
+        get().patchSession(id, { replacing: false })
+        return null
+      }
+      const replacement: Session = {
+        ...info, critter: current.critter, span: current.span, pos: current.pos,
+        status: 'running', lastDataAt: 0, busy: false, attention: false, unseen: false,
+        hasInput: !!spec.initialCommand,
+        hasConversation: !!spec.transcript, replacing: false,
+        resume: info.resume ?? spec.resume
+      }
+      window.buddy.feed.detach(id)
+      window.buddy.pty.kill(id)
+      set((s) => {
+        const { [id]: _feed, ...feeds } = s.feeds
+        const { [id]: _stats, ...toolStats } = s.toolStats
+        const { [id]: _agent, ...agents } = s.agents
+        return { sessions: s.sessions.map((x) => x.id === id ? replacement : x),
+          activeId: info.id, feeds, toolStats,
+          agents: { ...agents, [info.id]: spec.agent ?? spec.transcript?.agent ?? null } }
+      })
+      window.buddy.feed.attach(info.id, info.cwd, replacement.resume ? { agent: replacement.resume.agent, path: replacement.resume.path } : spec.transcript)
+      get().persist()
+      return info.id
+    } catch (e) {
+      get().patchSession(id, { replacing: false })
+      get().notify(`Could not open the chat: ${(e as Error).message}`)
+      return null
+    }
+  },
+
+  markInput(id) { get().patchSession(id, { hasInput: true }) },
+
+  closeSession(id, confirmed = false) {
+    const current = get().sessions.find((s) => s.id === id)
+    if (
+      current?.status === 'running' &&
+      get().settings.confirmCloseRunning && !confirmed
+    ) {
+      set({ pendingCloseId: id })
+      return
+    }
+    set({ pendingCloseId: null })
     window.buddy.pty.kill(id)
     window.buddy.feed.detach(id)
     set((s) => {
       const idx = s.sessions.findIndex((x) => x.id === id)
       const sessions = s.sessions.filter((x) => x.id !== id)
+      const { [id]: _feed, ...feeds } = s.feeds
+      const { [id]: _stats, ...toolStats } = s.toolStats
+      const { [id]: _agent, ...agents } = s.agents
       let activeId = s.activeId
       if (s.activeId === id) {
         const next = sessions[Math.min(idx, sessions.length - 1)]
         activeId = next ? next.id : null
       }
-      return { sessions, activeId }
+      return { sessions, activeId, feeds, toolStats, agents }
     })
     get().persist()
   },
 
   setActive(id) {
+    if (get().sessions.find((s) => s.id === id)?.detached) window.buddy.popout.focus(id)
     set((s) => ({
       activeId: id,
       sessions: s.sessions.map((x) => (x.id === id ? { ...x, attention: false, unseen: false } : x))
     }))
+    get().persist()
   },
 
   cycle(dir) {
@@ -234,7 +354,10 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
 
   renameSession(id, title) {
+    title = title.trim().slice(0, 100)
+    if (!title) return
     set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, title } : x)) }))
+    window.buddy.pty.rename(id, title)
     get().persist()
   },
 
@@ -260,6 +383,11 @@ export const useStore = create<State & Actions>((set, get) => ({
     get().persist()
   },
 
+  setPos(id, pos) {
+    set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, pos } : x)) }))
+    get().persist()
+  },
+
   setSpan(id, span) {
     const cols = Math.max(1, Math.min(4, Math.round(span.cols)))
     const rows = Math.max(1, Math.min(4, Math.round(span.rows)))
@@ -268,30 +396,49 @@ export const useStore = create<State & Actions>((set, get) => ({
     }))
     get().persist()
   },
+  setGridSizes(axis, weights) {
+    set((s) => ({ gridSizes: { ...s.gridSizes, [axis]: weights } }))
+    get().persist()
+  },
 
   addFeedEvents(id, events) {
     if (!events.length) return
     set((s) => {
+      if (!s.sessions.some((x) => x.id === id)) return {}
       const prev = s.feeds[id] ?? []
       // Keep the tail bounded; a long agent run can produce thousands of rows.
       const next = [...prev, ...events].slice(-500)
-      return { feeds: { ...s.feeds, [id]: next } }
+
+      const stats = new Map((s.toolStats[id] ?? []).map((t) => [t.key, { ...t }]))
+      for (const e of events) {
+        if (e.role !== 'tool' || !e.toolName) continue
+        const mcp = /^mcp__([^_]+(?:_[^_]+)*)__/.exec(e.toolName)?.[1] ?? null
+        const key = mcp ? `mcp:${mcp}` : e.toolName
+        const label = mcp ?? e.tool ?? e.toolName
+        const cur = stats.get(key)
+        if (cur) {
+          cur.count += 1
+          cur.lastAt = e.ts
+        } else {
+          stats.set(key, { key, label, count: 1, lastAt: e.ts, mcp })
+        }
+      }
+      const toolList = [...stats.values()].sort((a, b) => b.lastAt - a.lastAt).slice(0, 8)
+
+      return { feeds: { ...s.feeds, [id]: next }, toolStats: { ...s.toolStats, [id]: toolList },
+        sessions: s.sessions.map((x) => x.id === id && events.some((e) => e.role === 'user' || e.role === 'assistant')
+          ? { ...x, hasConversation: true } : x) }
     })
-  },
-
-  toggleRaw(id) {
-    set((s) => ({ rawPanes: { ...s.rawPanes, [id]: !s.rawPanes[id] } }))
-  },
-
-  /** Type a line into a pane's shell or agent, as if you had typed it. */
-  send(id, text) {
-    if (!text.trim()) return
-    window.buddy.pty.write(id, text + '\r')
   },
 
   async refreshAgents() {
     try {
-      set({ agents: await window.buddy.pty.probeAgents() })
+      const probed = await window.buddy.pty.probeAgents()
+      // A process scan can race a launch or replacement. It must not erase the
+      // conversation identity supplied by an import or resurrect closed IDs.
+      set((s) => ({ agents: Object.fromEntries(s.sessions.map((session) => [
+        session.id, probed[session.id] ?? s.agents[session.id] ?? null
+      ])) }))
     } catch {
       /* leaving the map empty just means "unknown", which the UI allows */
     }
@@ -349,7 +496,9 @@ export const useStore = create<State & Actions>((set, get) => ({
       if (!s.busy || s.status !== 'running') return s
       if (now - s.lastDataAt < settings.attentionDelayMs) return s
       changed = true
-      return { ...s, busy: false, attention: s.id !== activeId }
+      // A plain shell also emits output and then goes quiet. Only a pane that
+      // has produced an agent transcript should ever claim it needs the user.
+      return { ...s, busy: false, attention: s.id !== activeId && !!get().agents[s.id] }
     })
     if (changed) set({ sessions: next })
   },
@@ -372,6 +521,10 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
   setSettingsOpen(open) {
     set({ settingsOpen: open })
+  },
+  setNewSessionOpen(open) {
+    if (get().restoreItems || get().restoring) return
+    set({ newSessionOpen: open, ...(open ? { paletteOpen: false, settingsOpen: false } : {}) })
   },
   toggleBroadcast() {
     const broadcast = !get().broadcast
@@ -399,22 +552,68 @@ export const useStore = create<State & Actions>((set, get) => ({
     }, 4000)
   },
 
+  async restoreSelected(indexes) {
+    if (get().restoring || !get().restoreItems) return
+    const items = get().restoreItems!
+    const activeIndex = get().restoreActiveIndex
+    const failed = items.filter((item) => !item.available).map((item) => item.session)
+    set({ restoring: true })
+    let opened = 0, activeId: string | null = null
+    for (const item of items) {
+      if (!item.available || !indexes.includes(item.index)) continue
+      try {
+        const spec = await window.buddy.workspace.restoreSpec(item.session)
+        const id = await get().openSession(spec)
+        if (!id) throw Error('Could not open terminal')
+        opened++
+        if (item.index === activeIndex) activeId = id
+      } catch { failed.push(item.session) }
+    }
+    set({ restoring: false, restoreItems: null, unrestoredSessions: failed })
+    if (activeId) get().setActive(activeId)
+    get().persistNow()
+    if (failed.length) get().notify(`Reopened ${opened}. ${failed.length} unavailable or unlinked — use Saved chats; their recovery entries are kept.`)
+  },
+
+  async startFresh() {
+    if (get().restoring || !get().restoreItems) return
+    set({ restoring: true })
+    try {
+      const paths = await window.buddy.app.paths()
+      const id = await get().openSession({ cwd: paths.home })
+      if (!id) return
+      set({ restoreItems: null, unrestoredSessions: [] })
+    } finally { set({ restoring: false }) }
+    get().persistNow()
+  },
+
+  findSavedChats() {
+    if (get().restoring) return
+    set({ unrestoredSessions: get().restoreItems?.map((item) => item.session) ?? get().unrestoredSessions, restoreItems: null })
+    get().setSidebar(true, 'chats')
+    get().persistNow()
+  },
+
+  persistNow() {
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
+    const state = get()
+    // Opening/closing the startup chooser must never replace the recovery snapshot.
+    if (state.restoreItems || state.restoring || !state.ready) return
+    // An exited agent can still have a resumable conversation.
+    const live = state.sessions
+    const workspace: Workspace = {
+      sessions: live.map((s) => ({ cwd: s.cwd, shellId: s.shellId, title: s.title, critter: s.critter.name,
+        span: s.span, pos: s.pos, resume: s.resume, agent: s.resume?.agent ?? state.agents[s.id] ?? undefined })),
+      layout: state.layout, gridSizes: state.gridSizes,
+      activeIndex: Math.max(0, live.findIndex((s) => s.id === state.activeId)),
+      unrestoredSessions: state.unrestoredSessions
+    }
+    const error = window.buddy.workspace.saveSync(workspace)
+    if (error) get().notify('Could not save the workspace: ' + error)
+  },
+
   persist() {
     if (persistTimer) clearTimeout(persistTimer)
-    persistTimer = setTimeout(() => {
-      const { sessions, layout } = get()
-      void window.buddy.workspace.set({
-        sessions: sessions
-          .filter((s) => s.status === 'running')
-          .map((s) => ({
-            cwd: s.cwd,
-            shellId: s.shellId,
-            title: s.title,
-            critter: s.critter.name,
-            span: s.span
-          })),
-        layout
-      })
-    }, 400)
+    persistTimer = setTimeout(() => get().persistNow(), 400)
   }
 }))

@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { DEFAULT_SETTINGS, type Settings, type Workspace } from '@shared/types'
 
@@ -13,12 +13,11 @@ function readJson<T>(file: string, fallback: T): T {
 }
 
 function writeJson(file: string, value: unknown): void {
-  try {
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, JSON.stringify(value, null, 2), 'utf8')
-  } catch (err) {
-    console.error('[store] write failed', file, err)
-  }
+  mkdirSync(dirname(file), { recursive: true })
+  // A partial write must not replace the last usable workspace.
+  const temporary = file + '.tmp'
+  writeFileSync(temporary, JSON.stringify(value, null, 2), { encoding: 'utf8', flush: true })
+  renameSync(temporary, file)
 }
 
 const settingsFile = (): string => join(app.getPath('userData'), 'settings.json')

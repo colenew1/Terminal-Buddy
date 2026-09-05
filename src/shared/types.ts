@@ -1,14 +1,44 @@
 /** Types shared between the Electron main process, the preload bridge and the renderer. */
 
-export type LayoutMode = 'tabs' | 'grid'
+export type LayoutMode = 'tabs' | 'grid' | 'world'
 export type Agent = 'claude' | 'codex'
 
-/** A shell Coop knows how to launch. Detected at startup. */
+/** Explicit conversation identity. Never inferred from a folder's newest file. */
+export interface ResumeRef { agent: Agent; id: string; path: string }
+
+export interface TerminalSnapshot {
+  data: string
+  seq: number
+  cols: number
+  rows: number
+}
+
+export interface PopoutInit {
+  session: SessionInfo
+  settings: Settings
+  snapshot: TerminalSnapshot
+  exited: boolean
+  exitCode?: number
+}
+
+/** A catalog import follows this exact transcript, including older sessions. */
+export interface FeedSource {
+  agent: Agent
+  path: string
+}
+
+/** A shell Terminal Buddy knows how to launch. Detected at startup. */
 export interface ShellDef {
   id: string
   label: string
   path: string
   args: string[]
+}
+
+/** Where a bubble sits in the world view. */
+export interface Pos {
+  x: number
+  y: number
 }
 
 /** How many grid cells a pane occupies. */
@@ -24,10 +54,16 @@ export interface SessionSpec {
   title?: string
   /** Typed into the shell once it is ready (used by "resume this chat"). */
   initialCommand?: string
+  agent?: Agent
+  transcript?: FeedSource
+  resume?: ResumeRef
+  requireCwd?: boolean
   /** Renderer-only: restore a specific critter instead of picking a fresh one. */
   critter?: string
   /** Renderer-only: restore a saved grid footprint. */
   span?: Span
+  /** Renderer-only: restore a saved world position. */
+  pos?: Pos
 }
 
 /** What main returns once the pty is alive. */
@@ -38,6 +74,7 @@ export interface SessionInfo {
   shellLabel: string
   title: string
   pid: number
+  resume?: ResumeRef
 }
 
 export type SkillSource =
@@ -109,6 +146,8 @@ export interface FeedEvent {
   text: string
   /** For tool rows: the human verb, e.g. "Opened", "Ran". */
   tool?: string
+  /** The raw tool name, so MCP servers can be told apart from built-ins. */
+  toolName?: string
   ts: number
 }
 
@@ -150,12 +189,12 @@ export interface Settings {
   critters: boolean
   /** Soft chime when a pane starts waiting on you. */
   chime: boolean
+  /** Native desktop alerts after a submitted terminal goes quiet or exits. */
+  desktopNotifications: boolean
   /** Stills every animation, including the buddy. */
   reduceMotion: boolean
   /** Click in the command line to put the cursor there, instead of arrowing over. */
   clickToPosition: boolean
-  /** Show the raw terminal instead of the conversation. */
-  devMode: boolean
   /** Emoji set used for pane critters. */
   critterPack: string
   /** Keep an icon in the Windows notification area. */
@@ -185,9 +224,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'midnight',
   critters: true,
   chime: false,
+  desktopNotifications: true,
   reduceMotion: false,
   clickToPosition: true,
-  devMode: false,
   critterPack: 'forest',
   trayIcon: true,
   minimizeToTray: false,
@@ -198,7 +237,10 @@ export interface PersistedSession {
   cwd: string
   shellId: string
   title: string
+  resume?: ResumeRef
+  agent?: Agent
   span?: Span
+  pos?: Pos
   /** Restored so a pane keeps its critter across launches. */
   critter?: string
 }
@@ -214,7 +256,17 @@ export interface WindowBounds {
 export interface Workspace {
   sessions: PersistedSession[]
   layout: LayoutMode
+  gridSizes?: { columns: number[]; rows: number[] }
   bounds?: WindowBounds
+  activeIndex?: number
+  unrestoredSessions?: PersistedSession[]
+}
+
+export interface RestoreItem {
+  index: number
+  session: PersistedSession
+  available: boolean
+  description: string
 }
 
 export interface IntegrationStatus {

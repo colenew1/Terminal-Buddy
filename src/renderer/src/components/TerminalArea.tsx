@@ -1,13 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import TerminalPane from './TerminalPane'
+import GridDividers from './GridDividers'
+import { gridWeights } from '../lib/grid-sizing'
 import { useStore, type Session } from '../store/useStore'
 import { fitAll, focus as focusTerm } from '../lib/terminals'
 import { shortPath } from '../lib/format'
 import { randomTip } from '../lib/copy'
 import { canDrop, getDragItem, type DragItem } from '../lib/dnd'
-import { resumeCommandFor, skillLaunchCommand } from '../lib/commands'
+import { resumeChat, skillLaunchCommand } from '../lib/commands'
 import Buddy from './Buddy'
-import AgentView from './AgentView'
+import TerminalStatus from './TerminalStatus'
+import SessionName from './SessionName'
+import { beginTerminalDrag } from '../lib/terminal-drag'
 
 /** Roughly square, biased to wider rows — terminals want columns more than lines. */
 function baseColumns(n: number): number {
@@ -21,12 +25,15 @@ function applyDrop(item: DragItem, session: Session): void {
   const running = st.agents[session.id]
 
   if (item.kind === 'chat') {
-    window.buddy.pty.write(session.id, resumeCommandFor(item.entry) + '\r')
+    void resumeChat(item.entry, session.id)
+    return
   } else if (running === item.entry.agent) {
+    st.markInput(session.id)
     // The agent is already up, so the slash command goes straight in — without
     // a newline, so arguments can still be typed after it.
     window.buddy.pty.write(session.id, `/${item.entry.name}`)
   } else {
+    st.markInput(session.id)
     window.buddy.pty.write(session.id, skillLaunchCommand(item.entry) + '\r')
   }
   st.setActive(session.id)
@@ -38,28 +45,22 @@ export default function TerminalArea(): React.JSX.Element {
   const layout = useStore((s) => s.layout)
   const locked = useStore((s) => s.locked)
   const agents = useStore((s) => s.agents)
-  const rawPanes = useStore((s) => s.rawPanes)
-  const devMode = useStore((s) => s.settings.devMode)
-  const toggleRaw = useStore((s) => s.toggleRaw)
+  const gridSizes = useStore((s) => s.gridSizes)
   const reduceMotion = useStore((s) => s.settings.reduceMotion)
   const setActive = useStore((s) => s.setActive)
   const closeSession = useStore((s) => s.closeSession)
   const openSession = useStore((s) => s.openSession)
+  const settingsOpen = useStore((s) => s.settingsOpen)
+  const paletteOpen = useStore((s) => s.paletteOpen)
+  const pendingCloseId = useStore((s) => s.pendingCloseId)
+  const newSessionOpen = useStore((s) => s.newSessionOpen)
+  const restoring = useStore((s) => !!s.restoreItems || s.restoring)
 
   const areaRef = useRef<HTMLDivElement>(null)
-  const [compact, setCompact] = useState<Record<string, boolean>>({})
   const [dragId, setDragId] = useState<string | null>(null)
   const dragIdRef = useRef<string | null>(null)
   const [itemDrag, setItemDrag] = useState<DragItem | null>(null)
   const [hoverId, setHoverId] = useState<string | null>(null)
-  const resizing = useRef<{
-    id: string
-    x: number
-    y: number
-    unitW: number
-    unitH: number
-    from: { cols: number; rows: number }
-  } | null>(null)
 
   useEffect(() => {
     const t = requestAnimationFrame(() => fitAll())
@@ -67,8 +68,14 @@ export default function TerminalArea(): React.JSX.Element {
   }, [layout, sessions.length])
 
   useEffect(() => {
-    if (activeId && locked) focusTerm(activeId)
-  }, [activeId, locked])
+    if (!activeId || sessions.find((s) => s.id === activeId)?.detached || !locked || layout === 'world' || settingsOpen || paletteOpen || pendingCloseId || newSessionOpen || restoring) return
+    const cell = [...(areaRef.current?.querySelectorAll<HTMLElement>('.cell') ?? [])]
+      .find((el) => el.dataset.sessionId === activeId)
+    if (!cell) return
+    const focused = document.activeElement
+    if (cell.contains(focused) && focused?.closest('.session-name')) return
+    if (!cell.contains(focused) || !focused?.classList.contains('xterm-helper-textarea')) focusTerm(activeId)
+  }, [activeId, locked, layout, settingsOpen, paletteOpen, pendingCloseId, newSessionOpen, restoring, sessions.some((s) => s.id === activeId && s.detached)])
 
   // A catalog drag ends on the sidebar row, so listen globally to clear up.
   useEffect(() => {
@@ -121,35 +128,6 @@ export default function TerminalArea(): React.JSX.Element {
     for (const id of lastRects.current.keys()) if (!live.has(id)) lastRects.current.delete(id)
   })
 
-  /*
-   * Below a certain size a conversation is illegible, so the tile collapses to
-   * just its name. Measured rather than derived from the span, because the grid
-   * and the window both change the answer.
-   */
-  useEffect(() => {
-    const area = areaRef.current
-    if (!area) return
-    const ro = new ResizeObserver((entries) => {
-      setCompact((prev) => {
-        const next = { ...prev }
-        let changed = false
-        for (const entry of entries) {
-          const id = (entry.target as HTMLElement).dataset.sessionId
-          if (!id) continue
-          const r = entry.contentRect
-          const small = r.width < 260 || r.height < 170
-          if (next[id] !== small) {
-            next[id] = small
-            changed = true
-          }
-        }
-        return changed ? next : prev
-      })
-    })
-    for (const cell of area.querySelectorAll<HTMLElement>('.cell')) ro.observe(cell)
-    return () => ro.disconnect()
-  }, [sessions.length, layout])
-
   const cellAt = (x: number, y: number): string | null =>
     document.elementFromPoint(x, y)?.closest<HTMLElement>('.cell')?.dataset.sessionId ?? null
 
@@ -174,43 +152,13 @@ export default function TerminalArea(): React.JSX.Element {
     if (fromIdx >= 0 && toIdx >= 0) st.moveSession(fromIdx, toIdx)
   }
 
-  const onShieldUp = (): void => {
+  const onShieldUp = (event?: React.PointerEvent): void => {
+    const id = dragIdRef.current
     dragIdRef.current = null
     setDragId(null)
-  }
-
-  /* ---------------------------------------------------------------- resizing */
-
-  const onResizeDown = (e: React.PointerEvent, s: Session): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    const rect = (e.currentTarget as HTMLElement).closest('.cell')!.getBoundingClientRect()
-    resizing.current = {
-      id: s.id,
-      x: e.clientX,
-      y: e.clientY,
-      unitW: rect.width / s.span.cols,
-      unitH: rect.height / s.span.rows,
-      from: { ...s.span }
+    if (id && event && (event.clientX < 0 || event.clientX > innerWidth || event.clientY < 0 || event.clientY > innerHeight)) {
+      void useStore.getState().detachSession(id, { x: event.screenX, y: event.screenY })
     }
-  }
-
-  const onResizeMove = (e: React.PointerEvent): void => {
-    const r = resizing.current
-    if (!r) return
-    const st = useStore.getState()
-    const s = st.sessions.find((x) => x.id === r.id)
-    if (!s) return
-    // Always measured from where the drag began. Re-anchoring after each step
-    // compounds, so a single cell of travel could jump several sizes.
-    const cols = r.from.cols + Math.round((e.clientX - r.x) / r.unitW)
-    const rows = r.from.rows + Math.round((e.clientY - r.y) / r.unitH)
-    if (cols !== s.span.cols || rows !== s.span.rows) st.setSpan(r.id, { cols, rows })
-  }
-
-  const onResizeUp = (): void => {
-    resizing.current = null
   }
 
   /* ------------------------------------------------------------------ render */
@@ -242,20 +190,30 @@ export default function TerminalArea(): React.JSX.Element {
     )
   }
 
-  const cols = Math.max(baseColumns(sessions.length), ...sessions.map((s) => s.span.cols))
+  const cols = baseColumns(sessions.length)
+  const rows = Math.ceil(sessions.length / cols)
+  const columnWeights = gridWeights(cols, gridSizes.columns)
+  const rowWeights = gridWeights(rows, gridSizes.rows)
 
   return (
     <div
       ref={areaRef}
       className={[
         'area',
-        `area-${layout}`,
+        layout === 'grid' ? 'area-grid' : 'area-tabs',
+        layout === 'world' ? 'is-behind' : '',
         locked ? '' : 'is-unlocked',
         itemDrag ? 'is-item-drag' : ''
       ]
         .filter(Boolean)
         .join(' ')}
-      style={layout === 'grid' ? { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` } : undefined}
+      style={layout === 'grid' ? {
+        // Large fr factors prevent CSS's sub-1fr partial-fill behavior when a neighbor reaches its minimum.
+        gridTemplateColumns: columnWeights.map((n) => `minmax(min(160px, calc((100% - ${(cols - 1) * 8}px) / ${cols})), ${n * 1000}fr)`).join(' '),
+        gridTemplateRows: rowWeights.map((n) => `minmax(min(110px, calc((100% - ${(rows - 1) * 8}px) / ${rows})), ${n * 1000}fr)`).join(' ')
+      } : undefined}
+      aria-hidden={layout === 'world'}
+      inert={layout === 'world'}
       onDragEnter={() => {
         const item = getDragItem()
         if (item) setItemDrag(item)
@@ -285,8 +243,8 @@ export default function TerminalArea(): React.JSX.Element {
             style={
               layout === 'grid'
                 ? {
-                    gridColumn: `span ${Math.min(s.span.cols, cols)}`,
-                    gridRow: `span ${s.span.rows}`,
+                    gridColumn: i % cols + 1,
+                    gridRow: Math.floor(i / cols) + 1,
                     ['--critter' as string]: `hsl(${s.critter.hue} 70% 62%)`
                   }
                 : undefined
@@ -314,28 +272,19 @@ export default function TerminalArea(): React.JSX.Element {
               if (v.ok) applyDrop(item, s)
             }}
           >
-            {layout === 'grid' && (
-              <div className="cell-head" onMouseDown={() => locked && setActive(s.id)}>
+            {layout !== 'world' && (
+              <div className="cell-head" onPointerDown={(event) => beginTerminalDrag(event, s.id)} onMouseDown={() => locked && setActive(s.id)} title="Drag this header outside the app to pop out; drag onto another pane to rearrange">
                 <span className="cell-critter" title={`the ${s.critter.name}`}>
                   {s.critter.emoji}
                 </span>
                 <span className="cell-index">{i + 1}</span>
-                <span className="cell-title" title={s.cwd}>
-                  {s.title}
-                </span>
+                <SessionName session={s} />
                 {agents[s.id] && <span className={`badge ${agents[s.id]}`}>{agents[s.id]}</span>}
                 <span className="cell-path">{shortPath(s.cwd, 2)}</span>
                 {s.attention && <span className="dot attention" title="Waiting on you" />}
-                <button
-                  className={`icon-btn tiny ${rawPanes[s.id] ? 'is-on' : ''}`}
-                  title={rawPanes[s.id] ? 'Back to the conversation' : 'Show the raw terminal'}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleRaw(s.id)
-                  }}
-                >
-                  {'</>'}
-                </button>
+                <TerminalStatus session={s} />
+                <button className="icon-btn tiny" data-popout={s.id} title={s.detached ? 'Show popped-out terminal' : 'Pop out terminal'}
+                  onClick={() => void useStore.getState().detachSession(s.id)}>↗</button>
                 <button
                   className="icon-btn tiny"
                   title="Close terminal"
@@ -349,53 +298,42 @@ export default function TerminalArea(): React.JSX.Element {
               </div>
             )}
 
-            {/*
-              The terminal stays mounted underneath so its scrollback and sizing
-              survive; the conversation simply covers it. Dev mode lifts the lid.
-              Both live in a body box so neither hides the card header.
-            */}
+            {/* The native terminal is the only input surface. */}
             <div className="cell-body">
-              <TerminalPane session={s} visible={visible} />
-              {visible && !(devMode || rawPanes[s.id]) && (
-                <AgentView session={s} compact={!!compact[s.id]} />
-              )}
+              <TerminalPane
+                session={s}
+                visible={visible && !s.detached}
+                interactive={visible && !s.detached && layout !== 'world' && locked}
+              />
+              {s.detached && <div className="detached-placeholder"><span>{s.critter.emoji}</span><strong>Open in its own window</strong>
+                <button className="btn" onClick={() => window.buddy.popout.focus(s.id)}>Show window ↗</button>
+                <button className="btn" onClick={() => window.buddy.popout.dock(s.id)}>Dock back ↙</button></div>}
             </div>
 
             {/* While unlocked, a shield keeps xterm from claiming the pointer. */}
-            {!locked && visible && (
+            {!locked && visible && !s.detached && (
               <div
                 className="cell-shield"
                 onPointerDown={(e) => onShieldDown(e, s.id)}
                 onPointerMove={onShieldMove}
                 onPointerUp={onShieldUp}
-                onPointerCancel={onShieldUp}
+                onPointerCancel={() => onShieldUp()}
               >
                 <span className="shield-grip">
                   {s.critter.emoji} {s.title}
                 </span>
                 {layout === 'grid' && (
-                  <span className="shield-size">
-                    {s.span.cols}×{s.span.rows}
-                  </span>
+                  <span className="shield-help">Drag pane to move · drag dividers to resize</span>
                 )}
               </div>
             )}
 
-            {!locked && visible && layout === 'grid' && (
-              <div
-                className="cell-resize"
-                title="Drag to resize this pane"
-                onPointerDown={(e) => onResizeDown(e, s)}
-                onPointerMove={onResizeMove}
-                onPointerUp={onResizeUp}
-                onPointerCancel={onResizeUp}
-              />
-            )}
 
             {verdict && hovered && <div className="drop-hint">{verdict.reason}</div>}
           </div>
         )
       })}
+      {!locked && layout === 'grid' && <GridDividers columns={columnWeights} rows={rowWeights} />}
     </div>
   )
 }

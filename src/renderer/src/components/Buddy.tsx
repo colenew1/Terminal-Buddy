@@ -33,7 +33,7 @@ export default function Buddy({ mood, size = 26, title, onClick }: Props): React
       title={title}
       onClick={poke}
       role="img"
-      aria-label={`Coop buddy, ${mood}`}
+      aria-label={`Terminal Buddy, ${mood}`}
     >
       <svg viewBox="0 0 40 44" width={size} height={size * 1.1}>
         <defs>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, Menu, clipboard } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, Menu, clipboard, Notification } from 'electron'
 import { join } from 'node:path'
 import { statSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
@@ -6,6 +6,8 @@ import { homedir } from 'node:os'
 import type {
   Catalog,
   ChatEntry,
+  FeedSource,
+  PersistedSession,
   ScanProgress,
   SessionSpec,
   Settings,
@@ -18,6 +20,9 @@ import { loadSettings, saveSettings, loadWorkspace, saveWorkspace, cacheFile } f
 import { TrayController, setTaskbarBadge, setJumpList } from './tray'
 import { probeAgents } from './agents'
 import { FeedService } from './session-feed'
+import { prepareRestore, restoreSpec } from './session-restore'
+import { TerminalActivity, type TerminalAlert } from './terminal-activity'
+import { PopoutWindows } from './popouts'
 import {
   installCli,
   installContextMenu,
@@ -36,9 +41,53 @@ import {
 app.setName('terminal-buddy')
 
 const shells = detectShells()
-const ptys = new PtyManager(shells)
+let alertsEnabled = true
+const activity = new TerminalActivity((alert) => {
+  void showTerminalNotification(alert).catch(() => sendToRenderer('app:notificationError', 'Windows could not display a desktop notification.'))
+}, () => alertsEnabled)
+const ptys = new PtyManager(shells, activity)
+let activityTimer: NodeJS.Timeout | null = null
+const activeNotifications = new Map<string, Notification>()
+
+function showTerminalNotification(alert: TerminalAlert, test = false): Promise<{ ok: boolean; message: string }> {
+  if (!Notification.isSupported()) return Promise.resolve({ ok: false, message: 'Desktop notifications are not supported on this system.' })
+  return new Promise((resolve) => {
+    const notification = new Notification({
+      title: test ? 'Terminal Buddy — test alert' : `${alert.title} — ${alert.kind === 'exit' ? 'process exited' : 'may need you'}`,
+      body: test ? 'Desktop alerts are ready. Click to return to Terminal Buddy.' : alert.kind === 'exit'
+        ? 'The terminal process ended. Click to inspect its output.'
+        : 'No output for 8 seconds. It may be finished, paused, or waiting for an answer. Click to open the terminal.',
+      icon: join(app.isPackaged ? process.resourcesPath : join(__dirname, '../..'), 'resources', 'icon.png')
+    })
+    activeNotifications.get(alert.id)?.close()
+    activeNotifications.set(alert.id, notification)
+    // Retain click handlers while bounding references from long-lived workspaces.
+    if (activeNotifications.size > 32) {
+      const oldest = activeNotifications.keys().next().value!
+      activeNotifications.get(oldest)?.close()
+      activeNotifications.delete(oldest)
+    }
+    const timeout = setTimeout(() => resolve({ ok: false, message: 'Windows has not confirmed the alert. Check notification settings and Do not disturb.' }), 5000)
+    notification.on('show', () => { clearTimeout(timeout); resolve({ ok: true, message: 'Test alert sent to Windows. If no banner appears, check Do not disturb and notification settings.' }) })
+    notification.on('failed', (_event, error) => {
+      clearTimeout(timeout)
+      const message = `Desktop alert failed: ${error}`
+      resolve({ ok: false, message })
+      if (!test) sendToRenderer('app:notificationError', message)
+    })
+    notification.on('click', () => {
+      if (!test && popouts.focus(alert.id)) return
+      revealWindow()
+      if (!test) sendToRenderer('app:selectTerminal', alert.id)
+    })
+    notification.on('close', () => { if (activeNotifications.get(alert.id) === notification) activeNotifications.delete(alert.id) })
+    notification.show()
+  })
+}
 
 let win: BrowserWindow | null = null
+const popouts = new PopoutWindows(ptys, () => win, loadSettings)
+ptys.onEvent = (channel, ...args) => popouts.event(channel, ...args)
 let catalog: CatalogService | null = null
 let tray: TrayController | null = null
 let feeds: FeedService | null = null
@@ -107,6 +156,7 @@ function createWindow(): void {
     minWidth: 780,
     minHeight: 480,
     show: false,
+    icon: join(app.isPackaged ? process.resourcesPath : join(__dirname, '../..'), 'resources', 'icon.png'),
     backgroundColor: '#0f1115',
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
@@ -116,7 +166,8 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      spellcheck: false
+      spellcheck: false,
+      backgroundThrottling: false
     }
   })
 
@@ -165,6 +216,7 @@ function createWindow(): void {
   })
 
   win.on('closed', () => {
+    popouts.closeAll()
     win = null
     ptys.setTarget(null)
   })
@@ -179,16 +231,47 @@ function createWindow(): void {
 /* --------------------------------------------------------------- ipc wiring */
 
 function registerIpc(): void {
+  popouts.register()
   catalog = new CatalogService(cacheFile('catalog-cache.json'), (p: ScanProgress) =>
     sendToRenderer('catalog:progress', p)
   )
 
   ipcMain.handle('shells:get', () => shells)
 
-  ipcMain.handle('pty:create', (_e, spec: SessionSpec) => ptys.create(spec))
-  ipcMain.on('pty:write', (_e, id: string, data: string) => ptys.write(id, data))
-  ipcMain.on('pty:resize', (_e, id: string, cols: number, rows: number) => ptys.resize(id, cols, rows))
-  ipcMain.on('pty:kill', (_e, id: string) => ptys.kill(id))
+  ipcMain.handle('pty:create', (e, spec: SessionSpec) => {
+    if (e.sender !== win?.webContents) throw Error('Create terminals from the main workspace.')
+    return ptys.create(spec)
+  })
+  ipcMain.on('pty:write', (e, id: string, data: string, broadcast = false) => {
+    if (!popouts.canInput(e.sender, id, broadcast === true)) return
+    ptys.write(id, data)
+    if (e.sender !== win?.webContents) sendToRenderer('popout:input', id)
+  })
+  ipcMain.handle('pty:submit', (e, id: string, data: string) => {
+    if (!popouts.canInput(e.sender, id)) throw Error('Not this terminal window.')
+    if (typeof data !== 'string' || !data.length) throw new Error('No text to submit.')
+    return ptys.submit(id, data)
+  })
+  ipcMain.on('pty:resize', (e, id: string, cols: number, rows: number) => {
+    if (!popouts.canResize(e.sender, id)) return
+    ptys.resize(id, cols, rows)
+    if (popouts.isDetached(id)) sendToRenderer('popout:size', id, cols, rows)
+  })
+  ipcMain.on('pty:kill', (e, id: string) => {
+    if (e.sender !== win?.webContents) return
+    popouts.dock(id, false)
+    ptys.kill(id)
+    activeNotifications.get(id)?.close()
+    activeNotifications.delete(id)
+  })
+  ipcMain.on('pty:rename', (e, id: string, title: string) => {
+    if (e.sender !== win?.webContents) return
+    if (typeof title === 'string' && title.trim()) {
+      const name = title.trim().slice(0, 100)
+      activity.rename(id, name); ptys.rename(id, name); popouts.rename(id, name)
+    }
+  })
+  ipcMain.handle('app:testNotification', () => showTerminalNotification({ id: 'test', title: 'Terminal Buddy', kind: 'quiet' }, true))
 
   // Which panes are currently running an agent, keyed by session id.
   ipcMain.handle('pty:probeAgents', async () => {
@@ -202,12 +285,25 @@ function registerIpc(): void {
   ipcMain.handle('settings:get', () => loadSettings())
   ipcMain.handle('settings:set', (_e, s: Settings) => {
     saveSettings(s)
+    alertsEnabled = s.desktopNotifications
+    ptys.setScrollback(s.scrollback)
+    popouts.settingsChanged(s)
     tray?.enable(s.trayIcon)
     return s
   })
 
   ipcMain.handle('workspace:get', () => loadWorkspace())
-  ipcMain.handle('workspace:set', (_e, w: Workspace) => {
+  ipcMain.handle('workspace:prepareRestore', (_e, sessions: PersistedSession[]) => prepareRestore(sessions))
+  ipcMain.handle('workspace:restoreSpec', (_e, session: PersistedSession) => restoreSpec(session, loadSettings()))
+  ipcMain.on('workspace:saveSync', (event, w: Workspace) => {
+    if (event.sender !== win?.webContents) { event.returnValue = 'Only the main workspace can save sessions.'; return }
+    try {
+      saveWorkspace({ ...w, bounds: loadWorkspace().bounds })
+      event.returnValue = null
+    } catch (error) { event.returnValue = (error as Error).message }
+  })
+  ipcMain.handle('workspace:set', (e, w: Workspace) => {
+    if (e.sender !== win?.webContents) throw Error('Only the main workspace can save sessions.')
     // Keep whatever bounds the window listeners already recorded.
     const cur = loadWorkspace()
     saveWorkspace({ ...w, bounds: cur.bounds })
@@ -224,11 +320,6 @@ function registerIpc(): void {
     return withJumpList(catalog!.scan(projectRoots()))
   })
   ipcMain.handle('catalog:refresh', async (): Promise<Catalog> => withJumpList(catalog!.scan(projectRoots())))
-
-  ipcMain.handle('catalog:transcript', async (_e, entry: ChatEntry) => {
-    const { turns, truncated } = await catalog!.transcript(entry.path, entry.agent)
-    return { entry, turns, truncated }
-  })
 
   ipcMain.handle('catalog:export', async (_e, entry: ChatEntry) => {
     const settings = loadSettings()
@@ -258,7 +349,8 @@ function registerIpc(): void {
   ipcMain.handle('dialog:pickFolder', async () => {
     const res = await dialog.showOpenDialog(win!, {
       properties: ['openDirectory'],
-      title: 'Open folder in Buddy'
+      title: 'Choose a folder for Terminal Buddy',
+      defaultPath: app.getPath('home')
     })
     return res.canceled ? null : res.filePaths[0]
   })
@@ -288,7 +380,7 @@ function registerIpc(): void {
     (sessionId, events) => sendToRenderer('feed:events', sessionId, events),
     (sessionId, agent) => sendToRenderer('feed:agent', sessionId, agent)
   )
-  ipcMain.on('feed:attach', (_e, sessionId: string, cwd: string) => feeds?.attach(sessionId, cwd))
+  ipcMain.on('feed:attach', (_e, sessionId: string, cwd: string, source?: FeedSource) => feeds?.attach(sessionId, cwd, source))
   ipcMain.on('feed:detach', (_e, sessionId: string) => feeds?.detach(sessionId))
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())
@@ -347,6 +439,9 @@ if (!gotLock) {
     Menu.setApplicationMenu(null)
 
     registerIpc()
+    alertsEnabled = loadSettings().desktopNotifications
+    ptys.setScrollback(loadSettings().scrollback)
+    activityTimer = setInterval(() => activity.tick(), 1000)
     createWindow()
 
     tray = new TrayController(() => win, {
@@ -386,9 +481,14 @@ if (!gotLock) {
   })
 
   app.on('before-quit', () => {
+    popouts.closeAll()
+    if (activityTimer) clearInterval(activityTimer)
+    for (const notification of activeNotifications.values()) notification.close()
+    activeNotifications.clear()
     quitting = true
     tray?.dispose()
     feeds?.dispose()
-    ptys.killAll()
   })
+  // Let renderer beforeunload flush the final workspace before stopping PTYs.
+  app.on('will-quit', () => ptys.killAll())
 }

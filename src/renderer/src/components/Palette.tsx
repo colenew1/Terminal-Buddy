@@ -22,17 +22,13 @@ export default function Palette(): React.JSX.Element {
 
   const items = useMemo<Item[]>(() => {
     const s = useStore.getState()
-    const active = sessions.find((x) => x.id === activeId)
     const out: Item[] = [
       {
         key: 'cmd:new',
         group: 'Command',
-        label: 'New terminal',
+        label: 'New chat or terminal…',
         hint: 'Ctrl+Shift+T',
-        run: async () => {
-          const paths = await window.buddy.app.paths()
-          void s.openSession({ cwd: active?.cwd ?? paths.home })
-        }
+        run: () => s.setNewSessionOpen(true)
       },
       {
         key: 'cmd:open',
@@ -46,9 +42,12 @@ export default function Palette(): React.JSX.Element {
       {
         key: 'cmd:layout',
         group: 'Command',
-        label: s.layout === 'tabs' ? 'Switch to grid view' : 'Switch to tabs view',
+        label: `Switch view (now ${s.layout})`,
         hint: 'Ctrl+Shift+G',
-        run: () => s.setLayout(s.layout === 'tabs' ? 'grid' : 'tabs')
+        run: () => {
+          const order = ['tabs', 'grid', 'world'] as const
+          s.setLayout(order[(order.indexOf(s.layout) + 1) % order.length])
+        }
       },
       {
         key: 'cmd:broadcast',
@@ -110,7 +109,10 @@ export default function Palette(): React.JSX.Element {
         hint: sk.origin,
         run: () => {
           const id = useStore.getState().activeId
-          if (id) window.buddy.pty.write(id, `/${sk.name}`)
+          if (id) {
+            useStore.getState().markInput(id)
+            window.buddy.pty.write(id, `/${sk.name}`)
+          }
         }
       })
     }

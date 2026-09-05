@@ -1,53 +1,70 @@
 <div align="center">
-  <img src="build/icon.png" width="96" alt="Coop" />
-  <h1>Coop</h1>
+  <img src="build/icon.png" width="96" alt="Terminal Buddy" />
+  <h1>Terminal Buddy</h1>
   <p><b>A calm home for your coding agents.</b></p>
-  <p><i>Conversations, not terminals — with the terminal still there when you want it.</i></p>
+  <p><i>Real terminals. Friendly faces. Everything you need to answer, in view.</i></p>
 </div>
 
 ---
 
 ## Why
 
-Running several coding agents at once means running several terminals, and a terminal is a bad place to watch a conversation. You get ANSI redraw, spinners, boxes, and no idea which one is waiting on you.
+Running several coding agents at once means keeping track of their terminals, projects, and questions. Terminal Buddy makes those terminals easy to name, recognize, and organize.
 
-Coop puts the conversation first. Each agent is a **card**: what you said, what it said, and what it did — *"Opened src/index.ts"*, *"Ran npm test"* — instead of the commands that produced them. The terminal is still underneath, doing the work, one button away when you want it.
+Terminal Buddy puts the **live terminal first**, including trust prompts, approval menus, errors, and slash commands. The terminal is the only place to type or paste dictation; Enter, arrows, Escape, and Ctrl+C go directly to the running program. Nothing automatically answers approval questions.
+
+Click the title's pencil to give an instance a local name such as **Praveen's persona**. Labels persist in the workspace without modifying Claude or Codex history files. Tabs, grid cards, and World inhabitants use the same name.
+
+**Desktop notifications** are on by default and configurable in Settings. After submitted input, eight seconds of output silence produces a “may need you” alert; an actual terminal-process exit is labeled separately. Silence is a heuristic, not proof of task completion. Pauses are rate-limited to one notification per terminal every 30 seconds. Clicking an alert opens its live terminal. Settings includes a test button; Windows notification permissions and Do not disturb still apply. Monitoring runs in the main process, including while the app is minimized.
 
 Three things it fixes:
 
-1. **You lose track of which one needs you.** Agents run for minutes, then quietly stop. Coop flags the ones that went silent.
-2. **You lose your old sessions.** Both CLIs keep every conversation on disk. Coop indexes them, and you can drop one onto a card to pick it up.
-3. **The terminal is in the way.** It's plumbing, not an interface.
+1. **You lose track of which one needs you.** Agents run for minutes, then quietly stop. Terminal Buddy flags the ones that went silent.
+2. **You lose your old sessions.** Both CLIs keep every conversation on disk. Terminal Buddy indexes them, and you can drop one onto a card to pick it up.
+3. **Important prompts get lost.** The live terminal is the only session view, so no transcript overlay hides questions or menus.
 
 It is a personal tool, published in case it's useful. No telemetry, no account, no server — everything reads from your local disk.
 
-> Formerly *Terminal Buddy*. The buddy stayed; the terminal moved to the back.
+## One terminal, no transcript view
 
-## How the conversation view works
+The **+** button opens a chooser without creating a terminal. Start a new Claude chat, a new Codex chat, or a plain terminal; every fresh chooser defaults to your home directory (`C:\Users\Owner` on this PC). Choose a project folder first when needed. **Resume saved chat** opens the catalog directly, without leaving an unwanted terminal behind. The keyboard shortcut, World New button, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
 
-A terminal can't be the source of truth for this. Claude Code and Codex are full-screen TUIs, and scraping their redraws into clean turns is a losing game.
+Each instance shows the agent's native terminal output. Terminal Buddy enables truecolor for its child terminals, rather than inheriting a launcher's `NO_COLOR` setting. Colors come from the running program and the selected terminal theme; output is not rewritten into chat bubbles.
 
-But both already write a **structured JSONL transcript** of every session — the same files the catalog reads. So Coop finds the transcript a live pane is writing to, tails it, and renders that. The pty stays underneath for input and process lifetime; the transcript is what you see.
+A colored header reports **Output active**, **Opening**, **Quiet**, **May need you**, or **Exited**. These describe observed activity, not confirmed agent completion. There is no separate composer or Send button. Pasted text uses the terminal's paste handling, including bracketed paste when enabled by the running program; Terminal Buddy does not append Enter. Multiline editing and menu behavior belong to the shell or agent.
 
-That is what makes *"it just opens the file"* real rather than a mock: a `Read` tool call becomes **Opened src/index.ts**, because that is literally what the record says.
-
-A few consequences worth knowing:
-
-- **It discovers the agent by itself.** Nothing is declared up front — whichever CLI starts writing a transcript in that folder identifies itself by doing so. Typing `claude` by hand works exactly like resuming from the catalog.
-- **One transcript per card.** Two cards in the same folder won't mirror each other; a file already being followed is skipped.
-- **Only live sessions.** An old transcript sitting in the folder is ignored; it has to be actively written to.
-- **Plain shells still work.** No agent means no transcript, so the card is just a composer — type a command, press Enter.
-
-Press `</>` on any card, or turn on **Developer mode** in settings, to see the real terminal instead.
+Saved chats remain in the catalog and can be resumed or exported as Markdown. Dropping one onto an empty pane replaces that terminal in place; existing input and messages protect occupied panes. Background history reading is used only for tool/MCP activity and occupancy tracking, never as a separate session interface.
 
 ## Features
 
-**Cards, not panes**
-- Each agent is a conversation: your turns, its turns, and its actions in plain language
-- A composer at the bottom — type and press Enter; `Shift+Enter` for a new line
-- **✦ adds a skill** as a chip, or drag one in from the catalog; it goes to the agent as `/name`
-- Cards that get small collapse to just their name, because a two-inch conversation is nobody's friend
-- `</>` on any card shows the raw terminal
+**Pop-out terminals**
+
+Drag a tab or a pane's header outside the app to detach it, or click its ↗ button. The separate Windows window can be maximized, snapped, or moved to another monitor. Drag its **Drag to dock** handle back onto the highlighted strip in the main window, click **Dock back**, or close the pop-out to return it. Native title-bar dragging also docks when released over the strip. Escape cancels handle drags. A placeholder keeps the original grid slot and provides Show window / Dock back controls.
+
+Detaching never launches another shell or resumes another chat: the same PTY stays running. A bounded headless xterm screen provides an ordered snapshot including colors, scrollback, cursor state and alternate-screen menus; only the detached window controls its size while it is out. Terminal protocol queries are answered by one parser, not by both views. Input/pasted dictation still uses the native terminal with no automatic Enter. A detached window has no broadcast mode; typing there targets that terminal only. Main-window broadcast still explicitly targets the whole fleet.
+
+Closing a pop-out (including Ctrl+Shift+W) docks it instead of stopping its process. To end a terminal, close its pane in the main workspace. Closing the entire app closes all its windows and saves every session once; on the next launch, recovered sessions return to the main workspace rather than automatically opening extra windows. Pop-out placement is not persisted. Theme/font changes and local name changes are reflected in open pop-outs.
+
+**Pick up where you left off**
+
+After exiting the entire app, the next launch asks whether to reopen all available sessions, choose individual ones, browse saved chats, or start fresh. Names, folders, ordering, active pane, grid proportions and World positions are saved continuously and flushed on normal exit. Closing the app while the chooser is open keeps the previous recovery snapshot. Start fresh clears the reopen list, never the agents' conversation history.
+
+Chats imported from the catalog record their exact Claude/Codex session ID. New Claude chats launched by the chooser receive an explicit ID and become resumable once Claude writes their history. Missing folders/files and known agents without a linked ID are flagged, not silently replaced with another chat. New Codex chats and agents started manually in a shell need to be selected from Saved chats; there is no reliable process-to-session link for them yet. Legacy workspaces reopen terminal folders only. Changing conversations inside a CLI (for example `/resume` or `/clear`) does not update the recorded link; use the catalog to reopen the desired conversation as a new instance.
+
+This is conversation recovery, not a background terminal daemon: closing the app stops running processes. Unsent input, arbitrary shell state and scrollback are not restored, and previous tasks are not automatically resubmitted. Agent trust/approval prompts remain native terminal interactions. Disable the startup prompt in Settings if desired.
+
+**Friendly terminal cards**
+- Live output, questions, and menus stay visible
+- One native input surface for typing, pasted dictation, and interactive menus
+- Skills can be typed as slash commands or dragged in from the catalog
+- Editable header labels, recognizable critters, and smoothly resizable grid rows and columns
+- Native ANSI colors and a visible activity label
+
+**World view**
+- Every live terminal becomes a movable inhabitant, with motion reserved for meaningful state
+- Working agents spin; agents that may need you wave; click one to open its existing live terminal in Tabs
+- Tools observed in the live transcript orbit as satellites, with MCP servers identified separately
+- The wording is deliberately literal: observed use is shown now; live connection health will only appear once an agent reports it authoritatively
 
 **The buddy**
 - A small creature in the title bar whose mood is real state, not decoration: **asleep** with nothing open, **calm** when all is quiet, **working** while output streams, and visibly **agitated** the moment a pane starts waiting on you. Click it to jump straight to whichever pane that is.
@@ -57,7 +74,7 @@ Press `</>` on any card, or turn on **Developer mode** in settings, to see the r
 **Terminals**
 - 1–16 panes, switchable between **tabs** and **grid** at any time (`Ctrl+Shift+G`)
 - Auto-detects PowerShell 7, Windows PowerShell, Command Prompt, Git Bash and WSL
-- **Attention badges** — a pane that produced output and then went quiet gets flagged, so you can see at a glance which agent is waiting on you
+- **Attention badges** — an identified agent that produced output and then went quiet gets flagged as needing a look; ordinary shell prompts stay quiet
 - **Broadcast mode** — type once, send to every terminal (`Ctrl+Shift+B`)
 - **Click to move the cursor** — click any word in the line you're typing and the caret goes there. No arrow-key crawling.
 - **Rearrange the grid** — hit the padlock (`Ctrl+Shift+L`) and drag panes onto each other to swap them. Tabs reorder by dragging at any time.
@@ -237,7 +254,11 @@ The grid is locked by default, because a stray drag while you are working should
 - a shield drops over every pane — terminals keep producing output but stop taking input, so a drag can't be mistaken for a text selection
 - each pane grows a grab pill showing its critter and title
 - drag a pane over another and the rest **slide out of the way** as you go, the way app icons do — the reorder happens live, not on drop
-- **drag the bottom-right corner** to make a pane span more columns or rows, up to 4×4; the layout persists across restarts
+- **drag a divider between columns or rows** to resize both neighbors continuously; no long drag or off-screen corner is needed
+- double-click a divider to balance its neighbors, or focus it and use arrow keys for fine adjustments
+- proportions persist across restarts and layout switches; changing the grid's row/column count uses equal sizes for the changed axis
+
+Dividers keep neighboring tracks at least 160px wide or 110px high when space allows. The old whole-cell corner sizing is replaced by a regular grid; terminal order, names, running processes, and World positions are preserved.
 
 Movement is animated with a FLIP pass: every pane's position is measured before and after the reflow, then each one starts at its old spot and glides to the new one. Without it a reorder teleports and it's genuinely hard to see what went where. Calm mode turns it off.
 
@@ -258,7 +279,7 @@ What does work, and covers most of the need:
 
 ## Limitations
 
-- **Terminals don't survive a restart.** Closing the app kills its ptys. Real persistence needs a detached daemon holding the PTYs, which roughly doubles the architecture — and since both agent CLIs have their own resume, the catalog covers the actual need. Layout and folders *are* restored.
+- **Processes don't survive a restart.** Closing the app kills its PTYs. The startup chooser can resume explicitly linked conversations in new processes; it cannot continue an interrupted shell command. Unlinked conversations are available through the catalog.
 - Windows is the target. The code paths for macOS/Linux exist (shell detection, packaging targets) but are untested; the Explorer integration is Windows-only by nature.
 - Skills are catalogued and searchable, not editable. "Type `/name`" writes the invocation into the focused terminal.
 
@@ -268,18 +289,20 @@ What does work, and covers most of the need:
 npm run dev         # electron-vite dev server with HMR
 npm run typecheck   # tsc over main, preload and renderer
 npm run build       # compile to out/
-npm test            # typecheck + build + all three suites below
+npm test            # typecheck + build + all five suites below
 ```
 
-The tests drive the **real application**, not mocks — 29 assertions across three suites:
+The tests drive the **real application**, not mocks. Electron runs in disposable profiles, and the feed fixture gets a disposable home folder, so the suite never resets your actual workspace or writes into your real agent history.
 
 | Script | What it proves |
 | --- | --- |
 | `npm run test:smoke` | Boots the app over the Chrome DevTools Protocol, spawns a pty and round-trips `echo` through it, confirms the catalog indexed real skills/chats/projects, toggles the sidebar and grid, saves a screenshot. |
-| `npm run test:grid` | Opens 6 terminals, tiles them, checks every pane has real geometry and a unique critter, and waits for the attention badges — and the buddy's mood — to react. |
+| `npm run test:feed` | Writes isolated Claude and Codex transcript fixtures, verifies live tailing and readable tool calls, and proves Codex MCP use appears as a World satellite. |
+| `npm run test:grid` | Opens 6 terminals, tiles them, checks every pane has real geometry and a unique critter, and proves ordinary shell prompts do not raise false attention alerts. |
+| `npm run test:world` | Opens 5 terminals, checks spatial geometry, hidden-terminal isolation, conversation opening and drag rearrangement, then captures the World view. |
 | `npm run test:registry` | Round-trips the generated `.reg` through the real `reg.exe` under a scratch key (paths with spaces and all), then deletes it. |
 
-Only one Terminal Buddy can run at a time (single-instance lock), so **close the app before running the tests** — otherwise the harness quits instantly. It will tell you if that happens.
+The disposable profile also gives test runs their own single-instance lock, so your installed copy can stay open.
 
 Set `BUDDY_EXE` to point the harness at a packaged or installed build instead of `out/`:
 
@@ -287,7 +310,7 @@ Set `BUDDY_EXE` to point the harness at a packaged or installed build instead of
 BUDDY_EXE="$LOCALAPPDATA/Programs/Terminal Buddy/Terminal Buddy.exe" npm run test:smoke
 ```
 
-Regenerate the icon with `npm run icon` (pure Python, no image libraries needed).
+Regenerate the robot icon with `npm run icon` (Node, no image libraries needed). Distribution builds regenerate the Windows and tray icons automatically.
 
 ## License
 

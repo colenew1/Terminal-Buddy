@@ -2,8 +2,10 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   Catalog,
   ChatEntry,
-  ChatTranscript,
   FeedEvent,
+  FeedSource,
+  PersistedSession,
+  RestoreItem,
   IntegrationStatus,
   OpResult,
   ScanProgress,
@@ -11,7 +13,8 @@ import type {
   SessionSpec,
   Settings,
   ShellDef,
-  Workspace
+  Workspace,
+  PopoutInit, Pos
 } from '@shared/types'
 
 type Unsub = () => void
@@ -23,15 +26,31 @@ function on<A extends unknown[]>(channel: string, cb: (...args: A) => void): Uns
 }
 
 const api = {
+  popout: {
+    open: (id: string, point?: Pos): Promise<void> => ipcRenderer.invoke('popout:open', id, point),
+    init: (id: string): Promise<void> => ipcRenderer.invoke('popout:init', id),
+    dock: (id: string): void => ipcRenderer.send('popout:dock', id),
+    focus: (id: string): void => ipcRenderer.send('popout:focus', id),
+    drag: (id: string, phase: 'start' | 'move' | 'end' | 'cancel', point: Pos): void => ipcRenderer.send('popout:drag', id, phase, point),
+    onInit: (cb: (value: PopoutInit) => void): Unsub => on('popout:init', cb),
+    onState: (cb: (id: string, detached: boolean) => void): Unsub => on('popout:state', cb),
+    onSize: (cb: (id: string, cols: number, rows: number) => void): Unsub => on('popout:size', cb),
+    onInput: (cb: (id: string) => void): Unsub => on('popout:input', cb),
+    onTitle: (cb: (title: string) => void): Unsub => on('popout:title', cb),
+    onSettings: (cb: (settings: Settings) => void): Unsub => on('popout:settings', cb),
+    onDragging: (cb: (dragging: boolean, over: boolean) => void): Unsub => on('popout:dragging', cb)
+  },
   shells: {
     list: (): Promise<ShellDef[]> => ipcRenderer.invoke('shells:get')
   },
 
   pty: {
     create: (spec: SessionSpec): Promise<SessionInfo> => ipcRenderer.invoke('pty:create', spec),
-    write: (id: string, data: string): void => ipcRenderer.send('pty:write', id, data),
+    write: (id: string, data: string, broadcast = false): void => ipcRenderer.send('pty:write', id, data, broadcast),
+    submit: (id: string, data: string): Promise<void> => ipcRenderer.invoke('pty:submit', id, data),
     resize: (id: string, cols: number, rows: number): void => ipcRenderer.send('pty:resize', id, cols, rows),
     kill: (id: string): void => ipcRenderer.send('pty:kill', id),
+    rename: (id: string, title: string): void => ipcRenderer.send('pty:rename', id, title),
     onData: (cb: (id: string, data: string) => void): Unsub => on('pty:data', cb),
     onExit: (cb: (id: string, code: number) => void): Unsub => on('pty:exit', cb),
     onInfo: (cb: (id: string, patch: { pid: number }) => void): Unsub => on('pty:info', cb),
@@ -42,7 +61,6 @@ const api = {
   catalog: {
     get: (): Promise<Catalog> => ipcRenderer.invoke('catalog:get'),
     refresh: (): Promise<Catalog> => ipcRenderer.invoke('catalog:refresh'),
-    transcript: (entry: ChatEntry): Promise<ChatTranscript> => ipcRenderer.invoke('catalog:transcript', entry),
     exportMarkdown: (entry: ChatEntry): Promise<OpResult> => ipcRenderer.invoke('catalog:export', entry),
     onProgress: (cb: (p: ScanProgress) => void): Unsub => on('catalog:progress', cb)
   },
@@ -54,7 +72,10 @@ const api = {
 
   workspace: {
     get: (): Promise<Workspace> => ipcRenderer.invoke('workspace:get'),
-    set: (w: Workspace): Promise<void> => ipcRenderer.invoke('workspace:set', w)
+    set: (w: Workspace): Promise<void> => ipcRenderer.invoke('workspace:set', w),
+    saveSync: (w: Workspace): string | null => ipcRenderer.sendSync('workspace:saveSync', w),
+    prepareRestore: (sessions: PersistedSession[]): Promise<RestoreItem[]> => ipcRenderer.invoke('workspace:prepareRestore', sessions),
+    restoreSpec: (session: PersistedSession): Promise<SessionSpec> => ipcRenderer.invoke('workspace:restoreSpec', session)
   },
 
   integration: {
@@ -66,7 +87,7 @@ const api = {
   },
 
   feed: {
-    attach: (sessionId: string, cwd: string): void => ipcRenderer.send('feed:attach', sessionId, cwd),
+    attach: (sessionId: string, cwd: string, source?: FeedSource): void => ipcRenderer.send('feed:attach', sessionId, cwd, source),
     detach: (sessionId: string): void => ipcRenderer.send('feed:detach', sessionId),
     onEvents: (cb: (sessionId: string, events: FeedEvent[]) => void): Unsub => on('feed:events', cb),
     onAgent: (cb: (sessionId: string, agent: 'claude' | 'codex' | null) => void): Unsub =>
@@ -92,6 +113,9 @@ const api = {
     setStatus: (total: number, waiting: number, badge: string | null): void =>
       ipcRenderer.send('app:status', total, waiting, badge),
     show: (): void => ipcRenderer.send('app:show'),
+    testNotification: (): Promise<OpResult> => ipcRenderer.invoke('app:testNotification'),
+    onSelectTerminal: (cb: (id: string) => void): Unsub => on('app:selectTerminal', cb),
+    onNotificationError: (cb: (message: string) => void): Unsub => on('app:notificationError', cb),
     onNewTerminal: (cb: () => void): Unsub => on('app:new-terminal', cb),
     revealPath: (p: string): void => ipcRenderer.send('app:revealPath', p),
     openPath: (p: string): void => ipcRenderer.send('app:openPath', p),
