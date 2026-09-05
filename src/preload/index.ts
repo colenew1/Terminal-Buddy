@@ -62,6 +62,11 @@ const api = {
     uninstallCli: (): Promise<OpResult> => ipcRenderer.invoke('integration:uninstallCli')
   },
 
+  clipboard: {
+    read: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
+    write: (text: string): void => ipcRenderer.send('clipboard:write', text)
+  },
+
   app: {
     pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
     paths: (): Promise<{

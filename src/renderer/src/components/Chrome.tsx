@@ -24,6 +24,8 @@ export function TopBar(): React.JSX.Element {
   const setSettingsOpen = useStore((s) => s.setSettingsOpen)
   const setPalette = useStore((s) => s.setPalette)
   const notify = useStore((s) => s.notify)
+  const locked = useStore((s) => s.locked)
+  const setLocked = useStore((s) => s.setLocked)
   const { mood, busy, waiting, total } = useMood()
 
   const status = fleetStatus(total, busy, waiting)
@@ -76,6 +78,20 @@ export function TopBar(): React.JSX.Element {
           </button>
         </div>
         <button
+          className={`icon-btn ${locked ? '' : 'is-warn'}`}
+          title={
+            locked
+              ? 'Layout locked - click to unlock and rearrange panes (Ctrl+Shift+L)'
+              : 'Layout unlocked - drag panes to swap them. Click to lock (Ctrl+Shift+L)'
+          }
+          onClick={() => {
+            setLocked(!locked)
+            notify(locked ? 'Layout unlocked — drag panes to rearrange.' : 'Layout locked.')
+          }}
+        >
+          {locked ? '🔒' : '🔓'}
+        </button>
+        <button
           className={`icon-btn ${broadcast ? 'is-danger' : ''}`}
           title="Broadcast typing to every terminal (Ctrl+Shift+B)"
           onClick={toggleBroadcast}
@@ -98,7 +114,10 @@ export function TabBar(): React.JSX.Element {
   const openSession = useStore((s) => s.openSession)
   const renameSession = useStore((s) => s.renameSession)
   const settings = useStore((s) => s.settings)
+  const moveSession = useStore((s) => s.moveSession)
   const [editing, setEditing] = useState<string | null>(null)
+  const [dragFrom, setDragFrom] = useState<number | null>(null)
+  const [dragOver, setDragOver] = useState<number | null>(null)
 
   const newTerminal = async (): Promise<void> => {
     const active = sessions.find((s) => s.id === activeId)
@@ -112,7 +131,27 @@ export function TabBar(): React.JSX.Element {
         {sessions.map((s, i) => (
           <div
             key={s.id}
-            className={`tab ${s.id === activeId ? 'is-active' : ''} ${s.status === 'exited' ? 'is-exited' : ''} ${s.attention ? 'wants-you' : ''}`}
+            className={`tab ${s.id === activeId ? 'is-active' : ''} ${s.status === 'exited' ? 'is-exited' : ''} ${s.attention ? 'wants-you' : ''} ${dragOver === i && dragFrom !== i ? 'is-drop-target' : ''}`}
+            draggable={editing !== s.id}
+            onDragStart={(e) => {
+              setDragFrom(i)
+              e.dataTransfer.effectAllowed = 'move'
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              setDragOver(i)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (dragFrom !== null && dragFrom !== i) moveSession(dragFrom, i)
+              setDragFrom(null)
+              setDragOver(null)
+            }}
+            onDragEnd={() => {
+              setDragFrom(null)
+              setDragOver(null)
+            }}
             style={settings.critters ? { ['--critter' as string]: `hsl(${s.critter.hue} 70% 62%)` } : undefined}
             onMouseDown={() => setActive(s.id)}
             onDoubleClick={() => setEditing(s.id)}

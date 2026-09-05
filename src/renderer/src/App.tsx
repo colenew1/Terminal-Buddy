@@ -5,7 +5,8 @@ import Sidebar from './components/Sidebar'
 import Palette from './components/Palette'
 import SettingsPanel from './components/SettingsPanel'
 import { useStore } from './store/useStore'
-import { matchShortcut } from './lib/shortcuts'
+import { matchShortcut, matchClipboard } from './lib/shortcuts'
+import { handleClipboard } from './lib/clipboard'
 import { get as getTerm, writeTo } from './lib/terminals'
 import { greeting } from './lib/copy'
 import { chime } from './lib/chime'
@@ -88,28 +89,25 @@ export default function App(): React.JSX.Element {
         return
       }
 
+      // Clipboard first: what it does depends on what has focus, and the app
+      // owns these keys outright now that the default menu is gone.
+      const clip = matchClipboard(e)
+      if (clip) {
+        // Consumed asynchronously, so claim the event up front and let the
+        // handler decide; an unhandled Ctrl+C falls through as an interrupt.
+        void handleClipboard(clip).then((handled) => {
+          if (!handled && clip === 'copy') {
+            const id = useStore.getState().activeId
+            if (id) window.buddy.pty.write(id, '\x03')
+          }
+        })
+        e.preventDefault()
+        return
+      }
+
       const hit = matchShortcut(e)
       if (!hit) return
       const s = useStore.getState()
-
-      // Copy/paste must stay available while a modal has focus; everything else
-      // only makes sense against the terminal grid.
-      if (hit === 'copy' || hit === 'paste') {
-        const id = s.activeId
-        if (!id) return
-        const h = getTerm(id)
-        if (!h) return
-        e.preventDefault()
-        if (hit === 'copy') {
-          const sel = h.term.getSelection()
-          if (sel) void navigator.clipboard.writeText(sel)
-        } else {
-          void navigator.clipboard.readText().then((text) => {
-            if (text) window.buddy.pty.write(id, text)
-          })
-        }
-        return
-      }
 
       e.preventDefault()
       if (hit.startsWith('jump:')) return s.jumpTo(Number(hit.slice(5)))
@@ -148,6 +146,10 @@ export default function App(): React.JSX.Element {
           break
         case 'broadcast':
           s.toggleBroadcast()
+          break
+        case 'lock':
+          s.setLocked(!s.locked)
+          s.notify(s.locked ? 'Layout unlocked — drag panes to rearrange.' : 'Layout locked.')
           break
         case 'search':
           setSearchOpen(true)

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, Menu, clipboard } from 'electron'
 import { join } from 'node:path'
 import { statSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
@@ -263,6 +263,9 @@ function registerIpc(): void {
 
   ipcMain.on('app:show', () => revealWindow())
 
+  ipcMain.handle('clipboard:read', () => clipboard.readText())
+  ipcMain.on('clipboard:write', (_e, text: string) => clipboard.writeText(text))
+
   ipcMain.on('app:openExternal', (_e, url: string) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(() => undefined)
   })
@@ -309,6 +312,11 @@ if (!gotLock) {
     // Must match electron-builder's appId, or Windows treats a pinned
     // shortcut and the running window as two different apps.
     app.setAppUserModelId('com.terminalbuddy.app')
+
+    // Electron's default menu registers Ctrl+V (and friends) as accelerators,
+    // and Alt opens its hidden menu bar. Both fight the terminal, so the app
+    // owns every clipboard key itself — see renderer/src/lib/clipboard.ts.
+    Menu.setApplicationMenu(null)
 
     registerIpc()
     createWindow()

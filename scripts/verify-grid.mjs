@@ -76,6 +76,7 @@ try {
     }
   }
   await send('Runtime.enable')
+  await send('Input.enable').catch(() => undefined)
 
   for (let i = 0; i < 40; i++) {
     if (await ev(`!!document.querySelector('.app') && !document.querySelector('.boot')`)) break
@@ -126,6 +127,34 @@ try {
 
   const mood = await ev(`document.querySelector('.buddy')?.className ?? ''`)
   check('buddy reacts to panes needing you', mood.includes('buddy-alert'), mood)
+
+  // Lock/unlock and drag-to-swap.
+  const before = await ev(`[...document.querySelectorAll('.tab-critter')].map(e => e.textContent)`)
+  await ev(`[...document.querySelectorAll('.topbar .icon-btn')].find(b => b.textContent === '🔒')?.click()`)
+  await sleep(600)
+  const shields = await ev(`document.querySelectorAll('.cell-shield').length`)
+  check('unlocking puts a drag shield over every pane', shields === WANT, `${shields} shields`)
+
+  const boxes = await ev(`[...document.querySelectorAll('.cell')].slice(0, 2).map(c => {
+    const r = c.getBoundingClientRect()
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+  })`)
+  if (boxes.length === 2) {
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: boxes[0].x, y: boxes[0].y, button: 'left', clickCount: 1, pointerType: 'mouse' })
+    await sleep(150)
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: boxes[1].x, y: boxes[1].y, button: 'left', buttons: 1, pointerType: 'mouse' })
+    await sleep(150)
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: boxes[1].x, y: boxes[1].y, button: 'left', clickCount: 1, pointerType: 'mouse' })
+    await sleep(600)
+  }
+  const after = await ev(`[...document.querySelectorAll('.tab-critter')].map(e => e.textContent)`)
+  const swapped = after[0] === before[1] && after[1] === before[0]
+  check('dragging one pane onto another swaps them', swapped, `${before.slice(0,2).join(' ')} -> ${after.slice(0,2).join(' ')}`)
+
+  await ev(`[...document.querySelectorAll('.topbar .icon-btn')].find(b => b.textContent === '🔓')?.click()`)
+  await sleep(500)
+  const relocked = await ev(`document.querySelectorAll('.cell-shield').length`)
+  check('locking removes the shields', relocked === 0, `${relocked} shields`)
 
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(OUT, Buffer.from(shot.data, 'base64'))

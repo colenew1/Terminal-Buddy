@@ -44,6 +44,8 @@ interface State {
   paletteOpen: boolean
   settingsOpen: boolean
   broadcast: boolean
+  /** Locked means panes take input; unlocked means you can drag them around. */
+  locked: boolean
 
   catalog: Catalog | null
   catalogLoading: boolean
@@ -60,6 +62,9 @@ interface Actions {
   cycle: (dir: 1 | -1) => void
   jumpTo: (index: number) => void
   renameSession: (id: string, title: string) => void
+  setLocked: (v: boolean) => void
+  swapSessions: (a: string, b: string) => void
+  moveSession: (from: number, to: number) => void
   setLayout: (m: LayoutMode) => void
   markData: (id: string) => void
   markExit: (id: string, code: number) => void
@@ -94,6 +99,8 @@ export const useStore = create<State & Actions>((set, get) => ({
   paletteOpen: false,
   settingsOpen: false,
   broadcast: false,
+  // Always starts locked: a stray drag mid-session should never rearrange work.
+  locked: true,
 
   catalog: null,
   catalogLoading: false,
@@ -201,6 +208,40 @@ export const useStore = create<State & Actions>((set, get) => ({
 
   renameSession(id, title) {
     set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, title } : x)) }))
+    get().persist()
+  },
+
+  setLocked(v) {
+    set({ locked: v })
+    if (v) return
+    // Unlocking takes focus off the terminal so keystrokes cannot leak into a
+    // shell while you are dragging panes around.
+    ;(document.activeElement as HTMLElement | null)?.blur()
+  },
+
+  /** Drop one pane onto another: they trade places. */
+  swapSessions(a, b) {
+    if (a === b) return
+    set((s) => {
+      const next = [...s.sessions]
+      const i = next.findIndex((x) => x.id === a)
+      const j = next.findIndex((x) => x.id === b)
+      if (i < 0 || j < 0) return {}
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return { sessions: next }
+    })
+    get().persist()
+  },
+
+  moveSession(from, to) {
+    set((s) => {
+      if (from === to || from < 0 || to < 0) return {}
+      const next = [...s.sessions]
+      if (from >= next.length || to >= next.length) return {}
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return { sessions: next }
+    })
     get().persist()
   },
 

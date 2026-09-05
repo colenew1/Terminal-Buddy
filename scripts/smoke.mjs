@@ -76,6 +76,17 @@ async function findPage() {
   throw new Error('CDP target never appeared')
 }
 
+
+// modifiers bitmask: 1=Alt, 2=Ctrl, 4=Meta, 8=Shift
+async function chord(modifiers, key, code, keyCode) {
+  for (const type of ['rawKeyDown', 'keyUp']) {
+    await send('Input.dispatchKeyEvent', {
+      type, modifiers, key, code,
+      windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode
+    })
+  }
+}
+
 const results = []
 function check(name, ok, detail = '') {
   results.push({ name, ok, detail })
@@ -104,6 +115,7 @@ try {
 
   await send('Runtime.enable')
   await send('Page.enable')
+  await send('Input.enable').catch(() => undefined)
 
   // Boot: the splash must go away and the shell UI must render.
   let booted = false
@@ -179,6 +191,24 @@ try {
     await evaluate(`window.buddy.app.setStatus(2, 1, null); true`)
     check('status bridge accepts fleet updates', true, 'badge module bundled')
   }
+
+  // The bug this fixes: xterm treated Ctrl+V as the control byte 0x16 and
+  // preventDefault()ed, so nothing was ever pasted. Drive a real key event and
+  // confirm the shell echoes the clipboard back.
+  const pasted = await evaluate(`(async () => {
+    window.buddy.clipboard.write('PASTE_PROBE_42')
+    window.__acc = ''
+    window.__off = window.buddy.pty.onData((id, d) => { window.__acc += d })
+    const ta = document.querySelector('.xterm-helper-textarea')
+    if (ta) ta.focus()
+    return !!ta
+  })()`)
+  await sleep(400)
+  await chord(2, 'v', 'KeyV', 86)
+  await sleep(1500)
+  const echoed = await evaluate(`(() => { window.__off && window.__off(); return window.__acc })()`)
+  check('Ctrl+V pastes into the terminal', String(echoed).includes('PASTE_PROBE_42'),
+    pasted ? JSON.stringify(String(echoed).slice(-40)) : 'no terminal textarea')
 
   const catalog = await evaluate(`window.buddy.catalog.get().then(c => ({
     skills: c.skills.length,

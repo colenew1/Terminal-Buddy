@@ -7,7 +7,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { useStore, type Session } from '../store/useStore'
 import { fitOne, register, unregister, get as getTerm } from '../lib/terminals'
-import { matchShortcut } from '../lib/shortcuts'
+import { matchShortcut, matchClipboard } from '../lib/shortcuts'
 import { themeById } from '../lib/themes'
 
 
@@ -71,10 +71,18 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
       }
     })
 
-    // Let app shortcuts through to the window handler instead of the pty.
+    // Let app shortcuts and clipboard keys through to the window handler
+    // instead of the pty. Returning false here also stops xterm calling
+    // preventDefault, which is what used to swallow Ctrl+V as a raw 0x16.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
-      return matchShortcut(e) === null
+      if (matchShortcut(e) !== null) return false
+      const clip = matchClipboard(e)
+      if (clip === 'paste' || clip === 'cut') return false
+      // Ctrl+C is only a copy when something is selected; otherwise the shell
+      // needs it as an interrupt.
+      if (clip === 'copy') return !term.hasSelection()
+      return true
     })
 
     term.element?.addEventListener('focusin', () => setActive(id))
@@ -141,10 +149,10 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
     if (!h) return
     const sel = h.term.getSelection()
     if (sel) {
-      await navigator.clipboard.writeText(sel)
+      window.buddy.clipboard.write(sel)
       h.term.clearSelection()
     } else {
-      const text = await navigator.clipboard.readText()
+      const text = await window.buddy.clipboard.read()
       if (text) window.buddy.pty.write(id, text)
     }
   }
@@ -152,7 +160,7 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
   return (
     <div
       className={`pane ${visible ? 'is-visible' : 'is-hidden'} ${session.status === 'exited' ? 'is-exited' : ''}`}
-      onMouseDown={() => setActive(id)}
+      onMouseDown={() => useStore.getState().locked && setActive(id)}
       onContextMenu={onContextMenu}
     >
       <div className="pane-host" ref={hostRef} />
