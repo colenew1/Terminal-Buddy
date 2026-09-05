@@ -54,6 +54,7 @@ export interface ToolStat {
 export type SidebarTab = 'chats' | 'skills' | 'projects'
 
 interface State {
+  launchError: string | null
   ready: boolean
   shells: ShellDef[]
   settings: Settings
@@ -152,6 +153,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     try { await window.buddy.popout.open(id, point) }
     catch (error) { get().notify('Could not pop out terminal: ' + (error as Error).message) }
   },
+  launchError: null,
   ready: false,
   shells: [],
   settings: DEFAULT_SETTINGS,
@@ -227,8 +229,10 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
 
   async openSession(spec) {
+    set({ launchError: null })
     const { settings, sessions } = get()
     if (sessions.length >= 16) {
+      set({ launchError: '16 terminals is the cap — close one first.' })
       get().notify('16 terminals is the cap — close one first.')
       return null
     }
@@ -259,6 +263,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       get().persist()
       return info.id
     } catch (e) {
+      set({ launchError: (e as Error).message })
       get().notify(`Could not start a terminal: ${(e as Error).message}`)
       return null
     }

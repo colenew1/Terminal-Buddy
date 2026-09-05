@@ -290,7 +290,7 @@ try {
   if (catalog.errors > 0) console.log(`      (${catalog.errors} files unreadable)`)
 
   // Open the sidebar and switch to grid, then confirm panes still measure.
-  await evaluate(`document.querySelectorAll('.topbar .icon-btn')[0].click()`)
+  await evaluate(`document.querySelector('.topbar button[title^="Catalog"]').click()`)
   await sleep(400)
   const sidebar = await evaluate(`!!document.querySelector('.sidebar')`)
   check('sidebar opens', sidebar)

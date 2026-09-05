@@ -55,7 +55,15 @@ export async function probeAgents(pids: number[]): Promise<Record<number, Agent 
   const result: Record<number, Agent | null> = {}
   const live = pids.filter((p) => Number.isInteger(p) && p > 0)
   for (const p of live) result[p] = null
-  if (process.platform !== 'win32' || live.length === 0) return result
+  if (live.length === 0) return result
+  if (process.platform !== 'win32') {
+    try {
+      const { stdout } = await run('/bin/ps', ['-axww', '-o', 'pid=,ppid=,args='], {
+        timeout: 12000, maxBuffer: 8 * 1024 * 1024
+      })
+      return agentsFromPs(stdout, live)
+    } catch { return result }
+  }
 
   const file = join(tmpdir(), `buddy-agents-${Date.now()}.ps1`)
   try {
@@ -76,4 +84,38 @@ export async function probeAgents(pids: number[]): Promise<Record<number, Agent 
     await rm(file, { force: true }).catch(() => undefined)
   }
   return result
+}
+
+/** macOS and Linux provide the same PID/parent/command fields through ps. */
+export function agentsFromPs(output: string, roots: number[]): Record<number, Agent | null> {
+  const children = new Map<number, { pid: number; command: string }[]>()
+  for (const line of output.split('\n')) {
+    const match = /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(line)
+    if (!match) continue
+    const parent = Number(match[2])
+    const list = children.get(parent) ?? []
+    list.push({ pid: Number(match[1]), command: match[3] })
+    children.set(parent, list)
+  }
+  function find(pid: number, visited: Set<number>): Agent | null {
+    if (visited.has(pid)) return null
+    visited.add(pid)
+    for (const child of children.get(pid) ?? []) {
+      // Match the executable or the Node entry script, never arbitrary prompt
+      // arguments (e.g. `echo codex` or a project named claude).
+      const tokens = (child.command.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((token) => token.replace(/^(['"])(.*)\1$/, '$2'))
+      const executable = tokens[0]?.split('/').pop()?.toLowerCase()
+      if (executable === 'codex' || executable === 'claude') return executable
+      if (executable === 'node') {
+        const script = tokens.slice(1).find((token) => !token.startsWith('-')) ?? ''
+        const match = /(?:^|\/)(codex|claude)\.(?:js|mjs)$/i.exec(script)
+        if (match) return match[1].toLowerCase() as Agent
+        if (script.endsWith('/@anthropic-ai/claude-code/cli.js')) return 'claude'
+      }
+      const nested = find(child.pid, visited)
+      if (nested) return nested
+    }
+    return null
+  }
+  return Object.fromEntries(roots.map((pid) => [pid, find(pid, new Set())]))
 }

@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs'
+import { accessSync, constants, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, userInfo } from 'node:os'
 import type { ShellDef } from '@shared/types'
 
 function firstExisting(...paths: string[]): string | null {
@@ -44,13 +44,17 @@ export function detectShells(): ShellDef[] {
     const wsl = firstExisting(join(sysRoot, 'System32', 'wsl.exe'))
     if (wsl) out.push({ id: 'wsl', label: 'WSL', path: wsl, args: [] })
   } else {
-    const userShell = process.env.SHELL
-    if (userShell && existsSync(userShell)) {
-      out.push({ id: 'default', label: userShell.split('/').pop() || 'shell', path: userShell, args: ['-l'] })
+    // Finder/Dock launches may not inherit SHELL from a terminal.
+    let userShell = process.env.SHELL
+    if (!userShell) {
+      try { userShell = userInfo().shell ?? undefined } catch { /* use system shells */ }
+    }
+    if (userShell && executable(userShell)) {
+      out.push({ id: 'default', label: userShell.split('/').pop() || 'shell', path: userShell, args: ['-l', '-i'] })
     }
     for (const [id, p] of [['zsh', '/bin/zsh'], ['bash', '/bin/bash'], ['sh', '/bin/sh']] as const) {
-      if (existsSync(p) && !out.some((s) => s.path === p)) {
-        out.push({ id, label: id, path: p, args: ['-l'] })
+      if (executable(p) && !out.some((s) => s.path === p)) {
+        out.push({ id, label: id, path: p, args: ['-l', '-i'] })
       }
     }
   }
@@ -61,6 +65,10 @@ export function detectShells(): ShellDef[] {
     out.push({ id: 'fallback', label: 'Shell', path: fallback, args: [] })
   }
   return out
+}
+
+function executable(path: string): boolean {
+  try { accessSync(path, constants.X_OK); return true } catch { return false }
 }
 
 export function resolveShell(shells: ShellDef[], id: string | undefined): ShellDef {

@@ -26,6 +26,7 @@ function on<A extends unknown[]>(channel: string, cb: (...args: A) => void): Uns
 }
 
 const api = {
+  platform: process.platform,
   popout: {
     attention: (id: string, value: boolean): void => ipcRenderer.send('popout:attention', id, value),
     seen: (id: string): void => ipcRenderer.send('popout:seen', id),
@@ -71,6 +72,7 @@ const api = {
   },
 
   settings: {
+    onChanged: (cb: (s: Settings) => void): Unsub => on('settings:changed', cb),
     get: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
     set: (s: Settings): Promise<Settings> => ipcRenderer.invoke('settings:set', s)
   },
@@ -105,6 +107,10 @@ const api = {
   },
 
   app: {
+    newWindow: (): Promise<string> => ipcRenderer.invoke('app:newWindow'),
+    windows: (): Promise<{ id: string; label: string; terminals: number; current: boolean }[]> => ipcRenderer.invoke('app:windows'),
+    focusWindow: (id: string): Promise<void> => ipcRenderer.invoke('app:focusWindow', id),
+    onWindowsChanged: (cb: () => void): Unsub => on('app:windowsChanged', cb),
     pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
     paths: (): Promise<{
       home: string

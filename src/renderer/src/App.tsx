@@ -11,6 +11,7 @@ import { get as getTerm, writeTo } from './lib/terminals'
 import { greeting } from './lib/copy'
 import { chime } from './lib/chime'
 import { drawBadge } from './lib/badge'
+import { applyTheme } from './lib/themes'
 import Buddy from './components/Buddy'
 import CloseSessionDialog from './components/CloseSessionDialog'
 import NewSessionDialog from './components/NewSessionDialog'
@@ -57,6 +58,13 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     return window.buddy.popout.onSeen((id) => useStore.getState().patchSession(id, { attention: false, unseen: false }))
   }, [])
+
+  useEffect(() => window.buddy.settings.onChanged((settings) => {
+    applyTheme(settings.theme)
+    const shells = useStore.getState().shells
+    const defaultShellId = shells.some((shell) => shell.id === settings.defaultShellId) ? settings.defaultShellId : shells[0]?.id
+    useStore.setState({ settings: { ...settings, defaultShellId } })
+  }), [])
 
   useEffect(() => {
     const offState = window.buddy.popout.onState((id, detached) => {
@@ -158,7 +166,7 @@ export default function App(): React.JSX.Element {
         // Consumed asynchronously, so claim the event up front and let the
         // handler decide; an unhandled Ctrl+C falls through as an interrupt.
         void handleClipboard(clip).then((handled) => {
-          if (!handled && clip === 'copy') {
+          if (!handled && clip === 'copy' && e.ctrlKey && !e.metaKey) {
             const id = useStore.getState().activeId
             if (id) window.buddy.pty.write(id, '\x03')
           }
@@ -175,6 +183,9 @@ export default function App(): React.JSX.Element {
       if (hit.startsWith('jump:')) return s.jumpTo(Number(hit.slice(5)))
 
       switch (hit) {
+        case 'newWindow':
+          void window.buddy.app.newWindow().catch((error) => s.notify(error.message))
+          break
         case 'new': {
           s.setNewSessionOpen(true)
           break

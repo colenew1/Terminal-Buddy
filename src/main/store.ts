@@ -21,7 +21,11 @@ function writeJson(file: string, value: unknown): void {
 }
 
 const settingsFile = (): string => join(app.getPath('userData'), 'settings.json')
-const workspaceFile = (): string => join(app.getPath('userData'), 'workspace.json')
+const validWindowId = (id: unknown): id is string => typeof id === 'string' && (id === 'primary' || /^[0-9a-f-]{36}$/.test(id))
+const workspaceFile = (id = 'primary'): string => {
+  if (!validWindowId(id)) throw Error('Invalid workspace window ID.')
+  return join(app.getPath('userData'), id === 'primary' ? 'workspace.json' : `workspaces/${id}.json`)
+}
 
 export function loadSettings(): Settings {
   const settings = readJson<Settings>(settingsFile(), { ...DEFAULT_SETTINGS, alertsOptInVersion: 0 })
@@ -39,15 +43,36 @@ export function saveSettings(s: Settings): void {
   writeJson(settingsFile(), s)
 }
 
-export function loadWorkspace(): Workspace {
-  return readWorkspace(workspaceFile()) ?? readWorkspace(workspaceFile() + '.bak') ?? { sessions: [], layout: 'tabs' }
+export function loadWorkspace(id = 'primary'): Workspace {
+  return readWorkspace(workspaceFile(id)) ?? readWorkspace(workspaceFile(id) + '.bak') ?? { sessions: [], layout: 'tabs' }
 }
 
-export function saveWorkspace(w: Workspace): void {
-  const previous = readWorkspace(workspaceFile())
+export function saveWorkspace(w: Workspace, id = 'primary'): void {
+  const previous = readWorkspace(workspaceFile(id))
   // Keep the last valid snapshot. A corrupt primary must never poison backup.
-  if (previous) writeJson(workspaceFile() + '.bak', previous)
-  writeJson(workspaceFile(), w)
+  if (previous) writeJson(workspaceFile(id) + '.bak', previous)
+  writeJson(workspaceFile(id), w)
+}
+
+function readWindowIds(file: string): string[] | null {
+  try {
+    const value = JSON.parse(readFileSync(file, 'utf8'))
+    if (!Array.isArray(value) || !value.length || value.length > 32 || !value.every(validWindowId)) return null
+    return [...new Set<string>(value)]
+  } catch { return null }
+}
+
+export function loadWindowIds(): string[] {
+  const file = cacheFile('windows.json')
+  return readWindowIds(file) ?? readWindowIds(file + '.bak') ?? ['primary']
+}
+
+export function saveWindowIds(ids: string[]): void {
+  if (!ids.length || ids.length > 32 || !ids.every(validWindowId)) throw Error('Invalid workspace window list.')
+  const file = cacheFile('windows.json')
+  const previous = readWindowIds(file)
+  if (previous) writeJson(file + '.bak', previous)
+  writeJson(file, [...new Set(ids)])
 }
 
 function readWorkspace(file: string): Workspace | null {

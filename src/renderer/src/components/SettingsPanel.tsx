@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { IntegrationStatus } from '@shared/types'
 import { useStore } from '../store/useStore'
-import { SHORTCUT_HELP } from '../lib/shortcuts'
+import { IS_MAC, SHORTCUT_HELP } from '../lib/shortcuts'
 import { THEMES } from '../lib/themes'
 import { CRITTER_PACKS, packById } from '../lib/critters'
 import Buddy from './Buddy'
@@ -206,7 +206,7 @@ export default function SettingsPanel(): React.JSX.Element {
             <label className="field">
               <span>
                 Chime when output pauses
-                <small>Two soft in-app notes, independent of Windows notification sounds.</small>
+                <small>Two soft in-app notes, independent of system notification sounds.</small>
               </span>
               <input
                 type="checkbox"
@@ -216,10 +216,10 @@ export default function SettingsPanel(): React.JSX.Element {
             </label>
 
             <label className="field">
-              <span>Desktop notifications — {settings.desktopNotifications ? 'On' : 'Off'}<small>Off by default. Opt in to Windows alerts and taskbar flashing after 8 seconds without output following terminal input, or when its process exits. A pause is not confirmed completion. Limited to one pause alert per terminal every 30 seconds.</small></span>
+              <span>Desktop notifications — {settings.desktopNotifications ? 'On' : 'Off'}<small>Off by default. Opt in to desktop alerts and window attention cues after 8 seconds without output following terminal input, or when its process exits. A pause is not confirmed completion. Limited to one pause alert per terminal every 30 seconds.</small></span>
               <input type="checkbox" checked={settings.desktopNotifications} onChange={(e) => void setSettings({ desktopNotifications: e.target.checked })} />
             </label>
-            <button className="btn tiny" disabled={!settings.desktopNotifications} onClick={() => void window.buddy.app.testNotification().then((r) => notify(r.message)).catch(() => notify('Windows could not display the test notification.'))}>Send test desktop alert</button>
+            <button className="btn tiny" disabled={!settings.desktopNotifications} onClick={() => void window.buddy.app.testNotification().then((r) => notify(r.message)).catch(() => notify('The system could not display the test notification.'))}>Send test desktop alert</button>
 
             <label className="field">
               <span>
@@ -290,7 +290,7 @@ export default function SettingsPanel(): React.JSX.Element {
           </section>
 
           <section>
-            <h4>Taskbar and tray</h4>
+            <h4>{IS_MAC ? 'Dock and menu bar' : 'Taskbar and tray'}</h4>
             <label className="field">
               <span>
                 Notification area icon
@@ -330,12 +330,11 @@ export default function SettingsPanel(): React.JSX.Element {
               />
             </label>
             <p className="muted tiny">
-              A count appears over the taskbar icon whenever terminals are waiting on you, and right-clicking
-              it lists your recent projects.
+              {IS_MAC ? 'The Dock badge counts terminals waiting on you. The menu bar icon lists recent projects.' : 'A count appears over the taskbar icon whenever terminals are waiting on you, and right-clicking it lists your recent projects.'}
             </p>
           </section>
 
-          <section>
+          {window.buddy.platform === 'win32' && <section>
             <h4>Windows integration</h4>
             {status && !status.packaged && (
               <p className="muted warn">
@@ -390,7 +389,7 @@ export default function SettingsPanel(): React.JSX.Element {
                 {status?.cliInstalled ? 'Remove' : 'Install'}
               </button>
             </div>
-          </section>
+          </section>}
 
           <section>
             <h4>Keyboard</h4>

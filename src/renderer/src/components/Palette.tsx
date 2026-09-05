@@ -1,3 +1,4 @@
+import { shortcutLabel } from '../lib/shortcuts'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { fuzzy, shortPath, timeAgo } from '../lib/format'
@@ -24,10 +25,15 @@ export default function Palette(): React.JSX.Element {
     const s = useStore.getState()
     const out: Item[] = [
       {
+        key: 'cmd:newWindow', group: 'Command', label: 'New workspace window',
+        hint: shortcutLabel('Ctrl+Shift+N'),
+        run: () => { void window.buddy.app.newWindow().catch((error) => s.notify(error.message)) }
+      },
+      {
         key: 'cmd:new',
         group: 'Command',
         label: 'New chat or terminal…',
-        hint: 'Ctrl+Shift+T',
+        hint: shortcutLabel('Ctrl+Shift+T'),
         run: () => s.setNewSessionOpen(true)
       },
       {
@@ -43,7 +49,7 @@ export default function Palette(): React.JSX.Element {
         key: 'cmd:layout',
         group: 'Command',
         label: `Switch view (now ${s.layout})`,
-        hint: 'Ctrl+Shift+G',
+        hint: shortcutLabel('Ctrl+Shift+G'),
         run: () => {
           const order = ['tabs', 'grid'] as const
           s.setLayout(order[(order.indexOf(s.layout) + 1) % order.length])
@@ -53,7 +59,7 @@ export default function Palette(): React.JSX.Element {
         key: 'cmd:broadcast',
         group: 'Command',
         label: s.broadcast ? 'Turn broadcast off' : 'Turn broadcast on',
-        hint: 'Ctrl+Shift+B',
+        hint: shortcutLabel('Ctrl+Shift+B'),
         run: () => s.toggleBroadcast()
       },
       {
@@ -66,7 +72,7 @@ export default function Palette(): React.JSX.Element {
         key: 'cmd:settings',
         group: 'Command',
         label: 'Settings',
-        hint: 'Ctrl+,',
+        hint: shortcutLabel('Ctrl+,'),
         run: () => s.setSettingsOpen(true)
       }
     ]

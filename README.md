@@ -37,13 +37,21 @@ Saved chats remain in the catalog and can be resumed or exported as Markdown. Dr
 
 ## Features
 
+**Separate workspace windows**
+
+Click **⊞ New window** in the title bar, use **Ctrl+Shift+N** (**Cmd+Shift+N** on Mac), or choose **New workspace window** in the command palette. Each window starts with its own terminal and supports its own tabs, grid, names, and project folders. The arrow beside New window lists your workspaces and brings the selected window forward, including hidden windows. The tray menu also offers New window.
+
+Terminal input, broadcast typing, activity, and pop-outs stay within their owning workspace. Preferences and the saved-chat catalog are shared. Closing one workspace stops only its terminals and closes its pop-outs; other windows keep running. If Close to tray is enabled, closing hides the workspace and keeps its terminals alive. Quit from the tray or Mac application menu to exit all windows.
+
+On the next launch, windows that were open when you quit reopen with their own recovery choosers, saved names, and layouts. Explicitly closing a workspace removes it from that reopening list; closing the last workspace keeps it for the next launch. Existing single-window saves continue to work. Pop-outs dock back into their original workspace; merging whole workspaces or moving live terminals between them is not currently supported.
+
 **Pop-out terminals**
 
-Drag a tab or a pane's header outside the app to detach it, or click its ↗ button. The separate Windows window can be maximized, snapped, or moved to another monitor. Drag its **Drag to dock** handle back onto the highlighted strip in the main window, click **Dock back**, or close the pop-out to return it. Native title-bar dragging also docks when released over the strip. Escape cancels handle drags. A placeholder keeps the original grid slot and provides Show window / Dock back controls.
+Drag a tab or a pane's header outside the app to detach it, or click its ↗ button. The separate window can be maximized or moved to another monitor. Drag its **Drag to dock** handle back onto the highlighted strip in its original workspace, click **Dock back**, or close the pop-out to return it. Native title-bar dragging also docks when released over the strip. Escape cancels handle drags. A placeholder keeps the original grid slot and provides Show window / Dock back controls.
 
-Detaching never launches another shell or resumes another chat: the same PTY stays running. A bounded headless xterm screen provides an ordered snapshot including colors, scrollback, cursor state and alternate-screen menus; only the detached window controls its size while it is out. Terminal protocol queries are answered by one parser, not by both views. Input/pasted dictation still uses the native terminal with no automatic Enter. A detached window has no broadcast mode; typing there targets that terminal only. Main-window broadcast still explicitly targets the whole fleet.
+Detaching never launches another shell or resumes another chat: the same PTY stays running. A bounded headless xterm screen provides an ordered snapshot including colors, scrollback, cursor state and alternate-screen menus; only the detached window controls its size while it is out. Terminal protocol queries are answered by one parser, not by both views. Input/pasted dictation still uses the native terminal with no automatic Enter. A detached window has no broadcast mode; typing there targets that terminal only. Workspace broadcast explicitly targets that window’s terminals, including its pop-outs.
 
-Closing a pop-out (including Ctrl+Shift+W) docks it instead of stopping its process. To end a terminal, close its pane in the main workspace. Closing the entire app closes all its windows and saves every session once; on the next launch, recovered sessions return to the main workspace rather than automatically opening extra windows. Pop-out placement is not persisted. Theme/font changes and local name changes are reflected in open pop-outs.
+Closing a pop-out (including Ctrl+Shift+W) docks it instead of stopping its process. To end a terminal, close its pane in its workspace. Quitting the entire app closes all windows and saves every workspace; on the next launch, recovered sessions return to their own workspace rather than reopening pop-outs. Pop-out placement is not persisted. Theme/font changes and local name changes are reflected in open pop-outs.
 
 **Pick up where you left off**
 
@@ -284,15 +292,50 @@ What does work, and covers most of the need:
 ## Limitations
 
 - **Processes don't survive a restart.** Closing the app kills its PTYs. The startup chooser can resume explicitly linked conversations in new processes; it cannot continue an interrupted shell command. Unlinked conversations are available through the catalog.
-- Windows is the target. The code paths for macOS/Linux exist (shell detection, packaging targets) but are untested; the Explorer integration is Windows-only by nature.
+- macOS has platform-specific shell, agent detection, keyboard, window controls, menu bar, and Dock support. Apple Silicon and Intel builds are checked by `.github/workflows/macos.yml`; run that workflow before treating a Mac release as verified. Explorer integration and the installed `buddy` command remain Windows-only. Linux packaging is experimental.
 - Skills are catalogued and searchable, not editable. "Type `/name`" writes the invocation into the focused terminal.
 
 ## Development
+
+### Updating Codex inside Terminal Buddy
+
+Click **+ → Terminal only** to get a normal shell prompt. You can install and update command-line tools there. Close running Codex CLI sessions before updating, then open a new Codex chat afterwards. For an npm installation:
+
+```sh
+npm install -g @openai/codex@latest
+codex --version
+```
+
+Use the update method matching your original installation; see the [official Codex CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli). This updates the CLI; the desktop app has its own updater. If Terminal Buddy cannot open even a **Terminal only** pane, use PowerShell/Windows Terminal or macOS Terminal to update. The chooser now keeps the actual launch error visible; check **Settings → Terminal → Default shell** if it points to a missing shell. A native terminal-module error requires a Terminal Buddy reinstall/build for the correct OS and processor, rather than a Codex update.
+
+### Building for macOS
+
+On a Mac, use Node.js 22 and install dependencies there (do not copy `node_modules` from Windows). Login shells load the Mac user's shell configuration, including PATH setup for Homebrew, npm, and version managers. Finder/Dock launches fall back to the account's configured shell when `SHELL` is missing.
+
+```sh
+npm ci
+npm run typecheck
+npm run test:platform
+npm run dist:mac -- --publish never
+```
+
+This creates a DMG and ZIP in `release/` for the Mac's processor. Apple Silicon uses `arm64`; Intel uses `x64`. Build on each corresponding architecture so the native PTY dependency matches. The **macOS builds** GitHub Actions workflow does this on both architectures, runs the platform/unit checks, and tests each packaged app by opening a shell, detecting a mock agent, and exercising clipboard/interrupt keys. Download its build artifacts after a successful run. These test artifacts are not Developer ID signed or notarized; public distribution needs Apple signing credentials and notarization configured with [electron-builder](https://www.electron.build/code-signing-mac.html).
+
+On Mac, use **Cmd+C / Cmd+V** to copy/paste and **Control+C** to interrupt. App actions accept **Cmd+Shift** (e.g. Cmd+Shift+T); **Control+Tab** changes panes. The application menu provides Quit/Hide and window actions, and clicking the Dock icon reveals a hidden window. Windows Explorer settings are hidden on Mac. To open a folder from macOS Terminal after installing the app:
+
+```sh
+open -a "Terminal Buddy" --args "$PWD"
+```
+
+### Commands
 
 ```bash
 npm run dev         # electron-vite dev server with HMR
 npm run typecheck   # tsc over main, preload and renderer
 npm run build       # compile to out/
+npm run test:platform # platform logic checks on any host
+npm run test:platform-app # real PTY, process detection, and keyboard checks
+npm run test:windows # separate workspaces, ownership, pop-outs, and recovery
 npm test            # typecheck + build + regression suites
 ```
 

@@ -178,7 +178,7 @@ try {
 
   // Dragging a skill from the catalog should light up only the panes that can
   // take it. Nothing is running here, so every pane is a legal target.
-  await ev(`document.querySelectorAll('.topbar .icon-btn')[0].click()`)
+  await ev(`document.querySelector('.topbar button[title^="Catalog"]').click()`)
   await sleep(1500)
   await ev(`[...document.querySelectorAll('.sidebar-head .seg button')].find(b => b.textContent.startsWith('Skills'))?.click()`)
   await sleep(900)
@@ -217,7 +217,7 @@ try {
 
   await ev(`(() => { window.dispatchEvent(new Event('dragend')); return true })()`)
   await sleep(300)
-  await ev(`document.querySelectorAll('.topbar .icon-btn')[0].click()`)
+  await ev(`document.querySelector('.topbar button[title^="Catalog"]').click()`)
   await sleep(700)
 
   // A short, real mouse drag must resize neighboring columns immediately.

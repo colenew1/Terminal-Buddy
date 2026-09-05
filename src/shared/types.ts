@@ -211,7 +211,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   defaultShellId: 'pwsh',
   fontSize: 13,
-  fontFamily: '"Cascadia Mono", "JetBrains Mono", Consolas, "Courier New", monospace',
+  fontFamily: '"Cascadia Mono", "JetBrains Mono", Menlo, Monaco, Consolas, "Courier New", monospace',
   scrollback: 5000,
   layout: 'tabs',
   attentionDelayMs: 1200,

@@ -117,14 +117,20 @@ export class PtyManager {
       command = `claude --session-id ${chatId}`
     }
 
-    const pty = loadPty().spawn(shell.path, shell.args, {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd,
-      env: this.buildEnv(),
-      useConpty: true
-    })
+    let pty: IPty
+    try {
+      pty = loadPty().spawn(shell.path, shell.args, {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        cwd,
+        env: this.buildEnv(),
+        ...(process.platform === 'win32' ? { useConpty: true } : {})
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new Error(`Could not open ${shell.label} (${shell.path}). ${reason}\nChoose another default shell in Settings. If the error mentions node-pty or a native module, reinstall Terminal Buddy for your operating system and processor.`)
+    }
 
     const info: SessionInfo = {
       id,

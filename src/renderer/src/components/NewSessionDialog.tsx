@@ -50,7 +50,7 @@ export default function NewSessionDialog(): React.JSX.Element {
       store.setLocked(true)
       close()
     } else {
-      setError('The terminal could not be opened. Check the folder and try again.')
+      setError(useStore.getState().launchError || 'The terminal could not be opened. Check the folder and try again.')
       inFlight.current = false
       setBusy(false)
     }
@@ -74,9 +74,10 @@ export default function NewSessionDialog(): React.JSX.Element {
           <strong>New Codex chat</strong><span>Fresh conversation in this folder</span>
         </button>
         <button className="btn" data-new-kind="shell" disabled={busy || !cwd} onClick={() => void launch('shell')}>
-          <strong>Terminal only</strong><span>Open a shell without starting an agent</span>
+          <strong>Terminal only</strong><span>Run commands, install tools, or update Codex</span>
         </button>
       </div>
+      <p className="muted">To update a CLI, choose Terminal only and use its update command at the shell prompt. Close that CLI’s running sessions first, then reopen it after updating.</p>
       {error && <p className="new-session-error" role="alert">{error}</p>}
       <div className="new-session-actions">
         <button className="btn" data-new-resume disabled={busy} onClick={() => {

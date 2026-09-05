@@ -33,6 +33,19 @@ try {
   const a = { sessions: [{ cwd: profile, shellId: 'cmd', title: 'Previous' }], layout: 'grid', gridSizes: { columns: [.3, .7], rows: [1] } }
   store.saveWorkspace(a); store.saveWorkspace({ ...a, sessions: [{ ...a.sessions[0], title: 'Current' }] })
   pass('latest valid workspace is used normally', () => assert.equal(store.loadWorkspace().sessions[0].title, 'Current'))
+  pass('separate windows keep independent snapshots and backups', () => {
+    const id = '22222222-2222-4222-8222-222222222222'
+    store.saveWorkspace({ ...a, sessions: [{ ...a.sessions[0], title: 'Other window' }] }, id)
+    assert.equal(store.loadWorkspace(id).sessions[0].title, 'Other window')
+    assert.equal(store.loadWorkspace().sessions[0].title, 'Current')
+    store.saveWindowIds(['primary', id])
+    assert.deepEqual([...store.loadWindowIds()], ['primary', id])
+    store.saveWindowIds([id])
+    writeFileSync(join(profile, 'windows.json'), '{partial')
+    assert.deepEqual([...store.loadWindowIds()], ['primary', id])
+    assert.throws(() => store.saveWorkspace(a, '../outside'), /Invalid/)
+    assert.throws(() => store.saveWindowIds(['../outside']), /Invalid/)
+  })
   writeFileSync(join(profile, 'workspace.json'), '{partial')
   pass('corrupt primary falls back to last-known-good backup', () => assert.equal(store.loadWorkspace().sessions[0].title, 'Previous'))
   store.saveWorkspace(a)

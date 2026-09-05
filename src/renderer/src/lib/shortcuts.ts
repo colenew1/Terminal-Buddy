@@ -1,5 +1,6 @@
 export type ShortcutId =
   | 'new'
+  | 'newWindow'
   | 'close'
   | 'duplicate'
   | 'next'
@@ -15,6 +16,10 @@ export type ShortcutId =
 
 export type ClipboardAction = 'copy' | 'paste' | 'cut'
 
+export const IS_MAC = typeof window !== 'undefined' && window.buddy?.platform === 'darwin'
+export const shortcutLabel = (text: string): string => IS_MAC
+  ? text.replaceAll('Ctrl+', 'Cmd+').replaceAll('Alt+', 'Option+') : text
+
 /**
  * Clipboard chords, matched separately from app actions because what they do
  * depends on what has focus.
@@ -26,7 +31,8 @@ export type ClipboardAction = 'copy' | 'paste' | 'cut'
  * copy when there is a selection; otherwise it must stay an interrupt.
  */
 export function matchClipboard(e: KeyboardEvent): ClipboardAction | null {
-  const ctrl = e.ctrlKey || e.metaKey
+  // Control+C/V/X belong to the terminal line editor on a Mac.
+  const ctrl = IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey || e.metaKey
   if (e.altKey) return null
 
   // The old terminal chords, still honoured.
@@ -57,7 +63,7 @@ export function matchClipboard(e: KeyboardEvent): ClipboardAction | null {
 export function matchShortcut(e: KeyboardEvent): ShortcutId | null {
   const ctrl = e.ctrlKey || e.metaKey
 
-  if (ctrl && e.code === 'Tab') return e.shiftKey ? 'prev' : 'next'
+  if (e.ctrlKey && !e.metaKey && e.code === 'Tab') return e.shiftKey ? 'prev' : 'next'
   if (ctrl && !e.shiftKey && e.code === 'Comma') return 'settings'
 
   if (e.altKey && !ctrl && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
@@ -68,6 +74,8 @@ export function matchShortcut(e: KeyboardEvent): ShortcutId | null {
   switch (e.code) {
     case 'KeyT':
       return 'new'
+    case 'KeyN':
+      return 'newWindow'
     case 'KeyW':
       return 'close'
     case 'KeyD':
@@ -89,12 +97,13 @@ export function matchShortcut(e: KeyboardEvent): ShortcutId | null {
   }
 }
 
-export const SHORTCUT_HELP: [string, string][] = [
-  ['Ctrl+C / Ctrl+V', 'Copy / paste — Ctrl+C still interrupts when nothing is selected'],
+export const SHORTCUT_HELP: [string, string][] = ([
+  ['Ctrl+C / Ctrl+V', IS_MAC ? 'Copy / paste — Control+C interrupts the running program' : 'Copy / paste — Ctrl+C still interrupts when nothing is selected'],
   ['Ctrl+Shift+C / Ctrl+Shift+V', 'Copy / paste (also works)'],
   ['Right-click', 'Copy selection, or paste when nothing is selected'],
   ['Ctrl+Shift+L', 'Lock / unlock the layout for rearranging'],
   ['Ctrl+Shift+T', 'Choose a new chat or terminal'],
+  ['Ctrl+Shift+N', 'Open a separate workspace window'],
   ['Ctrl+Shift+D', 'Duplicate terminal (same folder)'],
   ['Ctrl+Shift+W', 'Close terminal'],
   ['Ctrl+Tab / Ctrl+Shift+Tab', 'Next / previous terminal'],
@@ -105,4 +114,4 @@ export const SHORTCUT_HELP: [string, string][] = [
   ['Ctrl+Shift+F', 'Search in terminal'],
   ['Ctrl+Shift+B', 'Broadcast typing to all terminals'],
   ['Ctrl+,', 'Settings']
-]
+] as [string, string][]).map(([key, description]) => [key.includes('Tab') ? key : shortcutLabel(key), description])

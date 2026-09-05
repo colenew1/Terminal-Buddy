@@ -18,10 +18,10 @@ export class PopoutWindows {
   private windows = new Map<string, Detached>()
   private stopping = false
 
-  constructor(private ptys: PtyManager, private primary: () => BrowserWindow | null, private settings: () => Settings) {}
+  constructor(private ptys: PtyManager, private primary: (id: string) => BrowserWindow | null, private settings: () => Settings) {}
 
-  private send(channel: string, ...args: unknown[]): void {
-    const main = this.primary()
+  private send(id: string, channel: string, ...args: unknown[]): void {
+    const main = this.primary(id)
     if (main && !main.isDestroyed()) main.webContents.send(channel, ...args)
   }
 
@@ -30,11 +30,20 @@ export class PopoutWindows {
   }
 
   isDetached(id: string): boolean { return this.windows.has(id) }
+
+  parentOf(sender: WebContents): BrowserWindow | null {
+    for (const [id, entry] of this.windows) if (entry.window.webContents === sender) return this.primary(id)
+    return null
+  }
+
+  closeWorkspace(window: BrowserWindow): void {
+    for (const id of [...this.windows.keys()]) if (this.primary(id) === window) this.dock(id, false)
+  }
   canResize(sender: WebContents, id: string): boolean {
-    return this.windows.has(id) ? this.owner(sender, id) : sender === this.primary()?.webContents
+    return this.windows.has(id) ? this.owner(sender, id) : sender === this.primary(id)?.webContents
   }
   canInput(sender: WebContents, id: string, broadcast = false): boolean {
-    return (sender === this.primary()?.webContents && (!this.isDetached(id) || broadcast)) || this.owner(sender, id)
+    return (sender === this.primary(id)?.webContents && (!this.isDetached(id) || broadcast)) || this.owner(sender, id)
   }
 
   focus(id: string): boolean {
@@ -73,11 +82,11 @@ export class PopoutWindows {
     this.windows.delete(id)
     clearTimeout(entry.timeout)
     if (!entry.window.isDestroyed()) entry.window.destroy()
-    this.send('popout:dragging', false)
+    this.send(id, 'popout:dragging', false)
     if (!this.stopping) {
-      this.send('popout:state', id, false)
+      this.send(id, 'popout:state', id, false)
       if (reveal) {
-        const main = this.primary()
+        const main = this.primary(id)
         if (main?.isMinimized()) main.restore()
         main?.show(); main?.focus()
       }
@@ -108,9 +117,9 @@ export class PopoutWindows {
     const entry: Detached = { window: child, ready: false, queue: [], bytes: 0,
       timeout: setTimeout(() => this.dock(id), 15000) }
     this.windows.set(id, entry)
-    this.send('popout:state', id, true)
+    this.send(id, 'popout:state', id, true)
     child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    child.on('focus', () => this.send('popout:seen', id))
+    child.on('focus', () => this.send(id, 'popout:seen', id))
     child.on('close', (event) => {
       if (this.stopping) return
       event.preventDefault(); this.dock(id)
@@ -120,14 +129,14 @@ export class PopoutWindows {
     let nativeDragging = false
     child.on('will-move', () => {
       nativeDragging = true
-      this.primary()?.showInactive()
-      this.send('popout:dragging', true, this.inDock(screen.getCursorScreenPoint()))
+      this.primary(id)?.showInactive()
+      this.send(id, 'popout:dragging', true, this.inDock(screen.getCursorScreenPoint(), id))
     })
     child.on('moved', () => {
       if (!nativeDragging) return
       nativeDragging = false
-      this.send('popout:dragging', false)
-      if (this.inDock(screen.getCursorScreenPoint())) this.dock(id)
+      this.send(id, 'popout:dragging', false)
+      if (this.inDock(screen.getCursorScreenPoint(), id)) this.dock(id)
     })
     try {
       if (process.env.ELECTRON_RENDERER_URL) {
@@ -137,8 +146,8 @@ export class PopoutWindows {
     } catch (error) { this.dock(id); throw error }
   }
 
-  private inDock(point: Pos): boolean {
-    const main = this.primary()
+  private inDock(point: Pos, id: string): boolean {
+    const main = this.primary(id)
     if (!main || main.isDestroyed() || !main.isVisible() || main.isMinimized()) return false
     const b = main.getContentBounds()
     return point.x >= b.x + 20 && point.x <= b.x + b.width - 20 && point.y >= b.y + 40 && point.y <= b.y + 140
@@ -146,17 +155,17 @@ export class PopoutWindows {
 
   register(): void {
     ipcMain.on('popout:attention', (e, id: string, value: boolean) => {
-      if (e.sender !== this.primary()?.webContents) return
+      if (e.sender !== this.primary(id)?.webContents) return
       const entry = this.windows.get(id)
       if (!entry) return
       entry.attention = value === true
       if (entry.ready) entry.window.webContents.send('popout:attention', entry.attention)
     })
     ipcMain.on('popout:seen', (e, id: string) => {
-      if (this.owner(e.sender, id)) this.send('popout:seen', id)
+      if (this.owner(e.sender, id)) this.send(id, 'popout:seen', id)
     })
     ipcMain.handle('popout:open', async (e, id: string, point?: Pos) => {
-      if (e.sender !== this.primary()?.webContents) throw Error('Only the workspace can detach a terminal.')
+      if (e.sender !== this.primary(id)?.webContents) throw Error('Only the workspace can detach a terminal.')
       await this.open(id, point)
     })
     ipcMain.handle('popout:init', async (e, id: string) => {
@@ -175,9 +184,9 @@ export class PopoutWindows {
       entry.window.show(); entry.window.focus()
     })
     ipcMain.on('popout:dock', (e, id: string) => {
-      if (this.owner(e.sender, id) || e.sender === this.primary()?.webContents) this.dock(id)
+      if (this.owner(e.sender, id) || e.sender === this.primary(id)?.webContents) this.dock(id)
     })
-    ipcMain.on('popout:focus', (e, id: string) => { if (e.sender === this.primary()?.webContents) this.focus(id) })
+    ipcMain.on('popout:focus', (e, id: string) => { if (e.sender === this.primary(id)?.webContents) this.focus(id) })
     ipcMain.on('popout:drag', (e, id: string, phase: string, point: Pos) => {
       if (!this.owner(e.sender, id) || !Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return
       const entry = this.windows.get(id)!
@@ -185,18 +194,18 @@ export class PopoutWindows {
         if (entry.window.isMaximized()) entry.window.unmaximize()
         const bounds = entry.window.getBounds()
         entry.drag = { pointer: point, origin: { x: bounds.x, y: bounds.y } }
-        const main = this.primary()
+        const main = this.primary(id)
         if (main?.isMinimized()) main.restore()
         main?.showInactive()
-        this.send('popout:dragging', true, false)
+        this.send(id, 'popout:dragging', true, false)
       } else if (phase === 'move' && entry.drag) {
         entry.window.setPosition(Math.round(entry.drag.origin.x + point.x - entry.drag.pointer.x), Math.round(entry.drag.origin.y + point.y - entry.drag.pointer.y))
-        this.send('popout:dragging', true, this.inDock(point))
+        this.send(id, 'popout:dragging', true, this.inDock(point, id))
       } else if (phase === 'end' || phase === 'cancel') {
         const dragging = !!entry.drag
         entry.drag = undefined
-        this.send('popout:dragging', false)
-        if (dragging && phase === 'end' && this.inDock(point)) this.dock(id)
+        this.send(id, 'popout:dragging', false)
+        if (dragging && phase === 'end' && this.inDock(point, id)) this.dock(id)
       }
     })
   }
