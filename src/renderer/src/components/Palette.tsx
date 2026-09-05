@@ -29,6 +29,9 @@ export default function Palette(): React.JSX.Element {
         hint: shortcutLabel('Ctrl+Shift+N'),
         run: () => { void window.buddy.app.newWindow().catch((error) => s.notify(error.message)) }
       },
+      { key: 'cmd:combine', group: 'Command', label: 'Combine all windows here', run: () => { void window.buddy.workspace.combine().catch(error => s.notify(error.message)) } },
+      { key: 'cmd:presets', group: 'Command', label: 'Workspace presets…', run: () => useStore.setState({ presetsOpen: true }) },
+      { key: 'cmd:move', group: 'Command', label: 'Move active terminal to another window…', run: () => { if (s.activeId) useStore.setState({ moveSessionId: s.activeId }) } },
       {
         key: 'cmd:new',
         group: 'Command',

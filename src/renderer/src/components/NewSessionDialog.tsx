@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import LaunchRecovery from './LaunchRecovery'
+import type { ChatEntry } from '@shared/types'
+import { shortPath } from '../lib/format'
 import { useStore } from '../store/useStore'
 
 /** Choosing is side-effect free: no terminal exists until a launch is selected. */
 export default function NewSessionDialog(): React.JSX.Element {
+  const library = useStore(s => s.library)
+  const catalog = useStore(s => s.catalog)
   const dialog = useRef<HTMLDialogElement>(null)
   const inFlight = useRef(false)
   const [cwd, setCwd] = useState('')
@@ -13,6 +18,7 @@ export default function NewSessionDialog(): React.JSX.Element {
 
   useEffect(() => {
     let live = true
+    useStore.setState({ launchError: null, failedSpec: null })
     dialog.current?.showModal()
     void window.buddy.app.paths().then((paths) => {
       if (live) setCwd((current) => current || paths.home)
@@ -28,7 +34,7 @@ export default function NewSessionDialog(): React.JSX.Element {
     setBusy(true)
     try {
       const dir = await window.buddy.app.pickFolder()
-      if (dir) { setCwd(dir); setError('') }
+      if (dir) { setCwd(dir); setError(''); void window.buddy.library.rememberFolder(dir).catch(() => {}) }
     } catch {
       setError('Could not open the folder picker. Please try again.')
     } finally { inFlight.current = false; setBusy(false) }
@@ -41,7 +47,7 @@ export default function NewSessionDialog(): React.JSX.Element {
     setError('')
     const store = useStore.getState()
     const id = await store.openSession({
-      cwd,
+      cwd, requireCwd: true,
       ...(kind === 'shell' ? {} : {
         agent: kind, initialCommand: kind,
         title: kind === 'claude' ? 'New Claude chat' : 'New Codex chat'
@@ -51,10 +57,21 @@ export default function NewSessionDialog(): React.JSX.Element {
       store.setLocked(true)
       close()
     } else {
-      setError(useStore.getState().launchError || 'The terminal could not be opened. Check the folder and try again.')
+      setError('')
       inFlight.current = false
       setBusy(false)
     }
+  }
+
+  const openPinned = async (chat: ChatEntry): Promise<void> => {
+    if (inFlight.current) return
+    inFlight.current = true; setBusy(true); setError('')
+    try {
+      const spec = await window.buddy.workspace.restoreSpec({ cwd: chat.cwd, shellId: useStore.getState().settings.defaultShellId,
+        title: chat.title.slice(0, 100), resume: { agent: chat.agent, id: chat.id, path: chat.path } })
+      if (await useStore.getState().openSession(spec)) { useStore.getState().setLocked(true); close() }
+    } catch (e) { setError((e as Error).message) }
+    finally { inFlight.current = false; setBusy(false) }
   }
 
   return (
@@ -93,7 +110,24 @@ export default function NewSessionDialog(): React.JSX.Element {
           </button>
         </>}
       </div>
+      {!choosingAgent && <details className="launcher-extras">
+        <summary>Recent folders, pinned chats & presets</summary>
+        <div className="launcher-list">
+          {library.recentFolders.length > 0 && <strong>Recent folders</strong>}
+          {library.recentFolders.slice(0, 5).map(path => <button className="btn" key={path} data-recent-folder={path} disabled={busy} title={path} onClick={() => { setCwd(path); setError('') }}>{shortPath(path, 3)}</button>)}
+          {library.pinnedChats.length > 0 && <strong>Pinned chats</strong>}
+          {library.pinnedChats.map(saved => {
+            const chat = catalog?.chats.find(c => c.agent === saved.agent && c.id === saved.id) ?? saved
+            return <div className="launcher-row" key={saved.agent + saved.id}>
+              <button className="btn" data-pinned-chat={saved.id} disabled={busy} title={chat.cwd} onClick={() => void openPinned(chat)}>{chat.title}<small>{chat.agent}</small></button>
+              <button className="btn" aria-label={`Unpin ${chat.title}`} disabled={busy} onClick={() => void window.buddy.library.pin(saved, false).catch(e => setError(e.message))}>★</button>
+            </div>
+          })}
+          <button className="btn" data-open-presets disabled={busy} onClick={() => { close(); useStore.setState({ presetsOpen: true }) }}>Workspace presets… ({library.presets.length})</button>
+        </div>
+      </details>}
       {error && <p className="new-session-error" role="alert">{error}</p>}
+      <LaunchRecovery onOpened={close} onBusy={value => { inFlight.current = value; setBusy(value) }} />
       <div className="new-session-actions">
         {choosingAgent && <button className="btn" data-new-back disabled={busy} onClick={() => setChoosingAgent(false)}>Back</button>}
         <button className="btn" data-new-cancel autoFocus disabled={busy} onClick={close}>Cancel</button>

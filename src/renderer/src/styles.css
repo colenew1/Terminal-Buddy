@@ -1722,3 +1722,21 @@ kbd {
 .close-session-dialog h3 { margin: 0 0 10px; overflow-wrap: anywhere; }
 .close-session-dialog p { color: var(--fg-dim); }
 .close-session-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+
+/* Workspace handoff and launcher shortcuts */
+.transfer-hover { position: fixed; inset: 42px 12px 12px; z-index: 3000; border: 3px dashed var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--bg-1) 85%, transparent); color: var(--accent); display: grid; place-items: center; font-size: 20px; font-weight: 600; pointer-events: none; }
+.transfer-busy { position: fixed; inset: 0; z-index: 4000; background: var(--scrim); display: grid; place-items: center; font-size: 20px; cursor: wait; }
+.launcher-extras { margin-top: 16px; color: var(--fg-dim); }
+.launcher-extras summary { cursor: pointer; padding: 8px 0; }
+.launcher-list { display: grid; gap: 8px; margin-top: 12px; }
+.launcher-list .btn { min-width: 0; overflow-wrap: anywhere; text-align: left; }
+.launcher-row { display: flex; gap: 8px; align-items: center; }
+.launcher-row > .btn:first-child { flex: 1; min-width: 0; }
+.launcher-list small { display: block; color: var(--fg-dim); margin-top: 4px; }
+.preset-save { display: grid; gap: 8px; margin-bottom: 20px; }
+.preset-save input, .launch-recovery select { width: 100%; background: var(--bg-2); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.launch-recovery { padding: 12px; border: 1px solid var(--warn); border-radius: 8px; margin-top: 12px; background: var(--bg-1); }
+.launch-recovery p { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--warn); }
+.launch-recovery label { display: grid; gap: 6px; margin-bottom: 10px; color: var(--fg-dim); }
+.launch-recovery .launcher-row { flex-wrap: wrap; }
+.launch-error-banner { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(620px, calc(100vw - 32px)); z-index: 2200; }

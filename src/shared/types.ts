@@ -285,3 +285,46 @@ export interface OpResult {
   ok: boolean
   message: string
 }
+
+/** View metadata travels with a live PTY; commands are never replayed by a move. */
+export interface TransferSession {
+  session: SessionInfo
+  critter: string
+  span: Span
+  pos: Pos
+  hasInput: boolean
+  hasConversation: boolean
+  attention: boolean
+  unseen: boolean
+  lastDataAt: number
+  busy: boolean
+  agent: Agent | null
+  feeds: FeedEvent[]
+}
+
+export interface TransferState {
+  sessions: TransferSession[]
+  workspace: Workspace
+  error?: string
+}
+
+export interface TransferArrival extends TransferSession {
+  snapshot: TerminalSnapshot
+  exited: boolean
+  exitCode?: number
+}
+
+export interface WorkspacePreset {
+  id: string
+  name: string
+  layout: LayoutMode
+  gridSizes?: Workspace['gridSizes']
+  /** Fresh assistants and shells only, never saved input or arbitrary commands. */
+  sessions: Pick<PersistedSession, 'cwd' | 'shellId' | 'title' | 'agent' | 'critter'>[]
+}
+
+export interface LauncherLibrary {
+  recentFolders: string[]
+  pinnedChats: ChatEntry[]
+  presets: WorkspacePreset[]
+}

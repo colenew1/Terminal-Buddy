@@ -14,7 +14,7 @@ import type {
   Settings,
   ShellDef,
   Workspace,
-  PopoutInit, Pos
+  PopoutInit, Pos, TransferState, TransferArrival, LauncherLibrary, WorkspacePreset
 } from '@shared/types'
 
 type Unsub = () => void
@@ -57,7 +57,7 @@ const api = {
     resize: (id: string, cols: number, rows: number): void => ipcRenderer.send('pty:resize', id, cols, rows),
     kill: (id: string): void => ipcRenderer.send('pty:kill', id),
     rename: (id: string, title: string): void => ipcRenderer.send('pty:rename', id, title),
-    onData: (cb: (id: string, data: string) => void): Unsub => on('pty:data', cb),
+    onData: (cb: (id: string, data: string, seq: number) => void): Unsub => on('pty:data', cb),
     onExit: (cb: (id: string, code: number) => void): Unsub => on('pty:exit', cb),
     onInfo: (cb: (id: string, patch: { pid: number }) => void): Unsub => on('pty:info', cb),
     probeAgents: (): Promise<Record<string, 'claude' | 'codex' | null>> =>
@@ -78,11 +78,30 @@ const api = {
   },
 
   workspace: {
+    move: (id: string, target: string): Promise<void> => ipcRenderer.invoke('workspace:move', id, target),
+    combine: (): Promise<void> => ipcRenderer.invoke('workspace:combine'),
+    drop: (id: string, point: Pos): Promise<void> => ipcRenderer.invoke('workspace:drop', id, point),
+    drag: (id: string, point?: Pos): void => ipcRenderer.send('workspace:drag', id, point),
+    transferReply: (token: string, state: TransferState): void => ipcRenderer.send('workspace:transferReply', token, state),
+    onTransferRequest: (cb: (token: string) => void): Unsub => on('workspace:transferRequest', cb),
+    onTransferArrive: (cb: (sessions: TransferArrival[], recovery: PersistedSession[]) => void): Unsub => on('workspace:transferArrive', cb),
+    onTransferRemove: (cb: (ids: string[]) => void): Unsub => on('workspace:transferRemove', cb),
+    onTransferEnd: (cb: () => void): Unsub => on('workspace:transferEnd', cb),
+    onTransferHover: (cb: (over: boolean) => void): Unsub => on('workspace:transferHover', cb),
     get: (): Promise<Workspace> => ipcRenderer.invoke('workspace:get'),
     set: (w: Workspace): Promise<void> => ipcRenderer.invoke('workspace:set', w),
     saveSync: (w: Workspace): string | null => ipcRenderer.sendSync('workspace:saveSync', w),
     prepareRestore: (sessions: PersistedSession[]): Promise<RestoreItem[]> => ipcRenderer.invoke('workspace:prepareRestore', sessions),
     restoreSpec: (session: PersistedSession): Promise<SessionSpec> => ipcRenderer.invoke('workspace:restoreSpec', session)
+  },
+
+  library: {
+    get: (): Promise<LauncherLibrary> => ipcRenderer.invoke('library:get'),
+    pin: (chat: ChatEntry, pinned: boolean): Promise<LauncherLibrary> => ipcRenderer.invoke('library:pin', chat, pinned),
+    rememberFolder: (path: string): Promise<LauncherLibrary> => ipcRenderer.invoke('library:folder', path),
+    savePreset: (preset: Omit<WorkspacePreset, 'id'>): Promise<LauncherLibrary> => ipcRenderer.invoke('library:savePreset', preset),
+    deletePreset: (id: string): Promise<LauncherLibrary> => ipcRenderer.invoke('library:deletePreset', id),
+    onChanged: (cb: (value: LauncherLibrary) => void): Unsub => on('library:changed', cb)
   },
 
   integration: {

@@ -14,6 +14,7 @@ const TABS: { id: SidebarTab; label: string }[] = [
 ]
 
 export default function Sidebar(): React.JSX.Element {
+  const pinned = useStore(s => s.library.pinnedChats)
   const tab = useStore((s) => s.sidebarTab)
   const setSidebar = useStore((s) => s.setSidebar)
   const width = useStore((s) => s.sidebarWidth)
@@ -174,6 +175,10 @@ export default function Sidebar(): React.JSX.Element {
                 <span>{timeAgo(c.updatedAt)}</span>
               </div>
               <div className="row-actions">
+                <button className="btn tiny" data-pin-chat={c.id} aria-pressed={pinned.some(p => p.agent === c.agent && p.id === c.id)}
+                  onClick={e => { e.stopPropagation(); void window.buddy.library.pin(c, !pinned.some(p => p.agent === c.agent && p.id === c.id)).catch(error => notify(error.message)) }}>
+                  {pinned.some(p => p.agent === c.agent && p.id === c.id) ? '★ Unpin' : '☆ Pin'}
+                </button>
                 <button
                   className="btn tiny primary"
                   onClick={(e) => {

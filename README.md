@@ -27,7 +27,7 @@ It is a personal tool, published in case it's useful. No telemetry, no account, 
 
 ## One terminal, no transcript view
 
-Fresh launches, new windows, **Start fresh** in recovery, and every **+** open a chooser without creating a terminal. Choose **Pick a chat** to browse saved conversations, **Start a new chat** to choose Claude or Codex, **Open folder…** to select the working folder, or **Just start fresh** to launch a plain terminal. Each fresh chooser starts in your home directory; selecting a folder updates it for the next chat or terminal. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
+Fresh launches, new windows, **Start fresh** in recovery, and every **+** open a chooser without creating a terminal. Choose **Pick a chat** to browse saved conversations, **Start a new chat** to choose Claude or Codex, **Open folder…** to select the working folder, or **Just start fresh** to launch a plain terminal. Expand **Recent folders, pinned chats & presets** for shortcuts. Pin or unpin conversations in the catalog with **☆ Pin**; pinned chats validate their saved history before reopening. Favorites and recent folders are shared across windows and saved for the next launch. Each fresh chooser starts in your home directory; selecting a folder updates it for the next chat or terminal. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
 
 Each instance shows the agent's native terminal output. Terminal Buddy enables truecolor for its child terminals, rather than inheriting a launcher's `NO_COLOR` setting. Colors come from the running program and the selected terminal theme; output is not rewritten into chat bubbles.
 
@@ -43,7 +43,11 @@ Click **⊞ New window** in the title bar, use **Ctrl+Shift+N** (**Cmd+Shift+N**
 
 Terminal input, broadcast typing, activity, and pop-outs stay within their owning workspace. Preferences and the saved-chat catalog are shared. Closing one workspace stops only its terminals and closes its pop-outs; other windows keep running. If Close to tray is enabled, closing hides the workspace and keeps its terminals alive. Quit from the tray or Mac application menu to exit all windows.
 
-On the next launch, windows that were open when you quit reopen with their own recovery choosers, saved names, and layouts. Explicitly closing a workspace removes it from that reopening list; closing the last workspace keeps it for the next launch. Existing single-window saves continue to work. Pop-outs dock back into their original workspace; merging whole workspaces or moving live terminals between them is not currently supported.
+On the next launch, windows that were open when you quit reopen with their own recovery choosers, saved names, and layouts. Explicitly closing a workspace removes it from that reopening list; closing the last workspace keeps it for the next launch. Existing single-window saves continue to work. Use **⇥** on a tab or pane to move it to another window, or drag its header outside the current window onto another visible workspace. Dropping outside every workspace still creates a pop-out. Moves keep the running process, terminal output, name, and recovery link; moving a popped-out terminal docks it into the destination. Choose **Workspace windows → Combine all windows here** to collect the terminals and close the emptied windows. The destination keeps its layout. Finish pending recovery choices first; a move that would exceed 16 terminals is rejected before changing any workspace.
+
+**Workspace presets**
+
+Open **Workspace windows → Workspace presets…** (also available from the chooser or command palette). Name the current setup to save its folders, shells, assistant choices, and layout. Opening a preset adds fresh sessions to the current window; it never replays terminal input or resumes the original conversations. Missing folders or shells are reported before launch. If a process launch fails midway, already opened sessions remain and the error offers a retry for the failed terminal. Presets can be removed individually.
 
 **Pop-out terminals**
 
@@ -306,7 +310,7 @@ npm install -g @openai/codex@latest
 codex --version
 ```
 
-Use the update method matching your original installation; see the [official Codex CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli). This updates the CLI; the desktop app has its own updater. If Terminal Buddy cannot open even a **Just start fresh** pane, use PowerShell/Windows Terminal or macOS Terminal to update. The chooser now keeps the actual launch error visible; check **Settings → Terminal → Default shell** if it points to a missing shell. A native terminal-module error requires a Terminal Buddy reinstall/build for the correct OS and processor, rather than a Codex update.
+Use the update method matching your original installation; see the [official Codex CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli). This updates the CLI; the desktop app has its own updater. If Terminal Buddy cannot open even a **Just start fresh** pane, use PowerShell/Windows Terminal or macOS Terminal to update. Launch errors offer **Retry**, **Choose another shell**, and **Copy error details**. Selecting another shell applies to that retry. The chooser keeps the actual launch error visible; check **Settings → Terminal → Default shell** if it points to a missing shell. A native terminal-module error requires a Terminal Buddy reinstall/build for the correct OS and processor, rather than a Codex update.
 
 ### Building for macOS
 
@@ -335,7 +339,8 @@ npm run typecheck   # tsc over main, preload and renderer
 npm run build       # compile to out/
 npm run test:platform # platform logic checks on any host
 npm run test:platform-app # real PTY, process detection, and keyboard checks
-npm run test:windows # separate workspaces, ownership, pop-outs, and recovery
+npm run test:windows # ownership, live moves, combining, pop-outs, and recovery
+npm run test:launcher # pinned chats, presets, recent folders, and launch recovery
 npm test            # typecheck + build + regression suites
 ```
 

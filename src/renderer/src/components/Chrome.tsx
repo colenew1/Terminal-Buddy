@@ -136,6 +136,10 @@ function WorkspaceWindowMenu(): React.JSX.Element {
     <button className="icon-btn" data-window-menu aria-label="Switch workspace window" title="Workspace windows" aria-expanded={open}
       onClick={() => setOpen(!open)}>▾</button>
     {open && <div className="workspace-window-list" aria-label="Workspace windows">
+      <button className="btn" data-combine-windows disabled={windows.length < 2} onClick={() => {
+        setOpen(false); void window.buddy.workspace.combine().catch(error => useStore.getState().notify(error.message))
+      }}>Combine all windows here</button>
+      <button className="btn" data-workspace-presets onClick={() => { setOpen(false); useStore.setState({ presetsOpen: true }) }}>Workspace presets…</button>
       {windows.map((entry) => <button key={entry.id} className="btn" data-window-target={entry.id} disabled={entry.current}
         onClick={() => { setOpen(false); void window.buddy.app.focusWindow(entry.id).catch((error) => useStore.getState().notify(error.message)) }}>
         {entry.label}{entry.current ? ' · this window' : ''}<small>{entry.terminals} terminal{entry.terminals === 1 ? '' : 's'}</small>
@@ -192,6 +196,7 @@ export function TabBar(): React.JSX.Element {
               <span className="tab-title">{s.title}</span>
             )}
             {s.attention && <span className="dot attention" title="Time to take a look — click to acknowledge" />}
+            <button className="tab-close" data-move-session={s.id} title="Move terminal to another window" aria-label="Move terminal to another window" onClick={() => useStore.setState({ moveSessionId: s.id })}>⇥</button>
             {!s.attention && s.unseen && <span className="dot unseen" title="New output" />}
             {s.status === 'exited' && <span className="tab-dead">exited</span>}
             <button className="tab-close" data-popout={s.id} title={s.detached ? 'Show popped-out terminal' : 'Pop out terminal'}

@@ -10,7 +10,7 @@ import {
   type Pos,
   type ShellDef,
   type Span,
-  type ResumeRef, type RestoreItem, type PersistedSession, type Workspace
+  type ResumeRef, type RestoreItem, type PersistedSession, type Workspace, type LauncherLibrary
 } from '@shared/types'
 import { pickCritter, findCritter, type Critter } from '../lib/critters'
 import { applyTheme } from '../lib/themes'
@@ -54,7 +54,12 @@ export interface ToolStat {
 export type SidebarTab = 'chats' | 'skills' | 'projects'
 
 interface State {
+  transferBusy: boolean
+  library: LauncherLibrary
+  presetsOpen: boolean
+  moveSessionId: string | null
   launchError: string | null
+  failedSpec: SessionSpec | null
   ready: boolean
   shells: ShellDef[]
   settings: Settings
@@ -153,7 +158,12 @@ export const useStore = create<State & Actions>((set, get) => ({
     try { await window.buddy.popout.open(id, point) }
     catch (error) { get().notify('Could not pop out terminal: ' + (error as Error).message) }
   },
+  transferBusy: false,
+  library: { recentFolders: [], pinnedChats: [], presets: [] },
+  presetsOpen: false,
+  moveSessionId: null,
   launchError: null,
+  failedSpec: null,
   ready: false,
   shells: [],
   settings: DEFAULT_SETTINGS,
@@ -190,6 +200,7 @@ export const useStore = create<State & Actions>((set, get) => ({
   toast: null,
 
   async boot() {
+    void window.buddy.library.get().then(library => set({ library })).catch(() => get().notify('Could not load your saved favorites and presets.'))
     const [shells, settings, workspace] = await Promise.all([
       window.buddy.shells.list(),
       window.buddy.settings.get(),
@@ -228,7 +239,8 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
 
   async openSession(spec) {
-    set({ launchError: null })
+    if (get().transferBusy) return null
+    set({ launchError: null, failedSpec: spec })
     const { settings, sessions } = get()
     if (sessions.length >= 16) {
       set({ launchError: '16 terminals is the cap — close one first.' })
@@ -258,8 +270,10 @@ export const useStore = create<State & Actions>((set, get) => ({
       set((s) => ({ sessions: [...s.sessions, session], activeId: info.id,
         unrestoredSessions: s.unrestoredSessions.filter((old) => !session.resume || old.resume?.id !== session.resume.id || old.resume?.agent !== session.resume.agent),
         agents: { ...s.agents, [info.id]: spec.agent ?? spec.transcript?.agent ?? null } }))
+      void window.buddy.library.rememberFolder(info.cwd).catch(() => {})
       window.buddy.feed.attach(info.id, info.cwd, session.resume ? { agent: session.resume.agent, path: session.resume.path } : spec.transcript)
       get().persist()
+      set({ failedSpec: null })
       return info.id
     } catch (e) {
       set({ launchError: (e as Error).message })
@@ -419,10 +433,12 @@ export const useStore = create<State & Actions>((set, get) => ({
       if (!s.sessions.some((x) => x.id === id)) return {}
       const prev = s.feeds[id] ?? []
       // Keep the tail bounded; a long agent run can produce thousands of rows.
-      const next = [...prev, ...events].slice(-500)
+      const seen = new Set(prev.map(event => event.id))
+      const fresh = events.filter(event => { if (seen.has(event.id)) return false; seen.add(event.id); return true })
+      const next = [...prev, ...fresh].slice(-500)
 
       const stats = new Map((s.toolStats[id] ?? []).map((t) => [t.key, { ...t }]))
-      for (const e of events) {
+      for (const e of fresh) {
         if (e.role !== 'tool' || !e.toolName) continue
         const mcp = /^mcp__([^_]+(?:_[^_]+)*)__/.exec(e.toolName)?.[1] ?? null
         const key = mcp ? `mcp:${mcp}` : e.toolName
@@ -605,7 +621,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     if (persistTimer) { clearTimeout(persistTimer); persistTimer = null }
     const state = get()
     // Opening/closing the startup chooser must never replace the recovery snapshot.
-    if (state.restoreItems || state.restoring || !state.ready) return
+    if (state.restoreItems || state.restoring || !state.ready || state.transferBusy) return
     // An exited agent can still have a resumable conversation.
     const live = state.sessions
     const workspace: Workspace = {

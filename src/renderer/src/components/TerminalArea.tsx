@@ -51,6 +51,7 @@ export default function TerminalArea(): React.JSX.Element {
   const closeSession = useStore((s) => s.closeSession)
   const settingsOpen = useStore((s) => s.settingsOpen)
   const paletteOpen = useStore((s) => s.paletteOpen)
+  const transferBusy = useStore(s => s.transferBusy || !!s.moveSessionId || s.presetsOpen)
   const pendingCloseId = useStore((s) => s.pendingCloseId)
   const newSessionOpen = useStore((s) => s.newSessionOpen)
   const restoring = useStore((s) => !!s.restoreItems || s.restoring)
@@ -76,14 +77,14 @@ export default function TerminalArea(): React.JSX.Element {
   }, [layout, sessions.length, focusedSessionId])
 
   useEffect(() => {
-    if (!activeId || sessions.find((s) => s.id === activeId)?.detached || (!locked && !focused) || settingsOpen || paletteOpen || pendingCloseId || newSessionOpen || restoring || walkthroughOpen || linkSessionId) return
+    if (!activeId || sessions.find((s) => s.id === activeId)?.detached || (!locked && !focused) || settingsOpen || paletteOpen || transferBusy || pendingCloseId || newSessionOpen || restoring || walkthroughOpen || linkSessionId) return
     const cell = [...(areaRef.current?.querySelectorAll<HTMLElement>('.cell') ?? [])]
       .find((el) => el.dataset.sessionId === activeId)
     if (!cell) return
     const activeElement = document.activeElement
     if (cell.contains(activeElement) && activeElement?.closest('.session-name')) return
     if (!cell.contains(activeElement) || !activeElement?.classList.contains('xterm-helper-textarea')) focusTerm(activeId)
-  }, [activeId, locked, layout, settingsOpen, paletteOpen, pendingCloseId, newSessionOpen, restoring, walkthroughOpen, linkSessionId, focusedSessionId, sessions.some((s) => s.id === activeId && s.detached)])
+  }, [activeId, locked, layout, settingsOpen, paletteOpen, transferBusy, pendingCloseId, newSessionOpen, restoring, walkthroughOpen, linkSessionId, focusedSessionId, sessions.some((s) => s.id === activeId && s.detached)])
 
   // A catalog drag ends on the sidebar row, so listen globally to clear up.
   useEffect(() => {
@@ -296,6 +297,7 @@ export default function TerminalArea(): React.JSX.Element {
                 {!s.detached && <button className="icon-btn tiny" data-focus-session={s.id}
                   title={focused ? 'Return to layout (Escape)' : 'Focus terminal (double-click header)'}
                   onClick={() => toggleFocus(s.id)}>{focused ? '↙' : '⛶'}</button>}
+                <button className="icon-btn tiny" data-move-session={s.id} title="Move terminal to another window" onClick={() => useStore.setState({ moveSessionId: s.id })}>⇥</button>
                 <button className="icon-btn tiny" data-popout={s.id} title={s.detached ? 'Show popped-out terminal' : 'Pop out terminal'}
                   onClick={() => void useStore.getState().detachSession(s.id)}>↗</button>
                 <button
@@ -316,7 +318,7 @@ export default function TerminalArea(): React.JSX.Element {
               <TerminalPane
                 session={s}
                 visible={visible && !s.detached}
-                interactive={visible && !s.detached && (locked || focused)}
+                interactive={visible && !s.detached && !transferBusy && (locked || focused)}
               />
               {s.detached && <div className="detached-placeholder"><span>{s.critter.emoji}</span><strong>Open in its own window</strong>
                 <button className="btn" onClick={() => window.buddy.popout.focus(s.id)}>Show window ↗</button>

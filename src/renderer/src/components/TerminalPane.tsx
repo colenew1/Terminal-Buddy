@@ -67,7 +67,7 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
     register(id, { term, fit, search, container: host })
 
     term.onData((data) => {
-      if (getTerm(id)?.detached || isTerminalReply(data)) return
+      if (useStore.getState().transferBusy || getTerm(id)?.detached || isTerminalReply(data)) return
       // xterm also emits terminal-protocol replies. Those are not user input.
       const userInput = /^[^\x00-\x1f\x7f]/.test(data) || data === '\r' || data.startsWith('\x1b[200~')
       if (useStore.getState().broadcast) {

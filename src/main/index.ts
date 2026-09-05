@@ -25,6 +25,8 @@ import { FeedService } from './session-feed'
 import { prepareRestore, restoreSpec, validate } from './session-restore'
 import { TerminalActivity, type TerminalAlert } from './terminal-activity'
 import { PopoutWindows } from './popouts'
+import { WindowTransfers } from './window-transfers'
+import { registerLauncherLibrary } from './launcher-library'
 import {
   installCli,
   installContextMenu,
@@ -87,13 +89,14 @@ function showTerminalNotification(alert: TerminalAlert, test = false): Promise<{
   })
 }
 
-interface WorkspaceWindow { id: string; label: string; window: BrowserWindow; total: number; waiting: number }
+interface WorkspaceWindow { id: string; label: string; window: BrowserWindow; total: number; waiting: number; lastFocused: number }
 const windows = new Map<string, WorkspaceWindow>()
 const sessionOwners = new Map<string, string>()
 let activeWindowId = 'primary'
 let nextWindowNumber = 1
 const ownerWindow = (sessionId: string): BrowserWindow | null => windows.get(sessionOwners.get(sessionId) ?? '')?.window ?? null
 const popouts = new PopoutWindows(ptys, ownerWindow, loadSettings)
+const transfers = new WindowTransfers(windows, sessionOwners, ptys, popouts, revealWindow)
 ptys.onEvent = (channel, ...args) => {
   sendToSession(args[0] as string, channel, ...args)
   popouts.event(channel, ...args)
@@ -168,6 +171,7 @@ function sendToRenderer(channel: string, ...args: unknown[]): void {
   for (const entry of windows.values()) if (!entry.window.isDestroyed()) entry.window.webContents.send(channel, ...args)
 }
 function sendToSession(id: string, channel: string, ...args: unknown[]): void {
+  transfers.capture(id, channel, args)
   const target = ownerWindow(id)
   if (target && !target.isDestroyed()) target.webContents.send(channel, ...args)
 }
@@ -208,12 +212,12 @@ function createWindow(id: string = randomUUID(), persist = true): BrowserWindow 
       nodeIntegration: false, sandbox: false, spellcheck: false, backgroundThrottling: false
     }
   })
-  windows.set(id, { id, label, window: win, total: 0, waiting: 0 })
+  windows.set(id, { id, label, window: win, total: 0, waiting: 0, lastFocused: Date.now() })
   activeWindowId = id
   if (persist) persistWindowList()
   win.on('page-title-updated', (event) => { event.preventDefault(); win.setTitle(title) })
   if (b?.maximized) win.maximize()
-  win.on('focus', () => { activeWindowId = id })
+  win.on('focus', () => { activeWindowId = id; const entry = windows.get(id); if (entry) entry.lastFocused = Date.now() })
   win.on('ready-to-show', () => {
     win.show()
     announceWindows()
@@ -230,6 +234,7 @@ function createWindow(id: string = randomUUID(), persist = true): BrowserWindow 
   win.on('resized', saveBounds); win.on('moved', saveBounds)
   win.on('maximize', saveBounds); win.on('unmaximize', saveBounds)
   win.on('close', (e) => {
+    if (transfers.isLocked(id)) { e.preventDefault(); return }
     if (quitting) return
     if (loadSettings().closeToTray && loadSettings().trayIcon) { e.preventDefault(); win.hide() }
   })
@@ -266,6 +271,8 @@ function createWindow(id: string = randomUUID(), persist = true): BrowserWindow 
 
 function registerIpc(): void {
   popouts.register()
+  transfers.register()
+  registerLauncherLibrary(workspaceFor, value => sendToRenderer('library:changed', value))
   catalog = new CatalogService(cacheFile('catalog-cache.json'), (p: ScanProgress) =>
     sendToRenderer('catalog:progress', p)
   )
@@ -274,6 +281,8 @@ function registerIpc(): void {
 
   ipcMain.handle('pty:create', (e, spec: SessionSpec) => {
     const workspace = workspaceFor(e.sender)
+    if (transfers.isLocked(workspace.id)) throw Error('A terminal move is finishing. Try again shortly.')
+    if ([...sessionOwners.values()].filter(id => id === workspace.id).length >= 16) throw Error('16 terminals is the cap — close one first.')
     const session = ptys.create(spec)
     sessionOwners.set(session.id, workspace.id)
     return session
@@ -352,12 +361,13 @@ function registerIpc(): void {
   ipcMain.on('workspace:saveSync', (event, w: Workspace) => {
     try {
       const { id } = workspaceFor(event.sender)
-      saveWorkspace({ ...w, bounds: loadWorkspace(id).bounds }, id)
+      if (!transfers.isLocked(id)) saveWorkspace({ ...w, bounds: loadWorkspace(id).bounds }, id)
       event.returnValue = null
     } catch (error) { event.returnValue = (error as Error).message }
   })
   ipcMain.handle('workspace:set', (e, w: Workspace) => {
     const { id } = workspaceFor(e.sender)
+    if (transfers.isLocked(id)) throw Error('Wait for the terminal move to finish.')
     const cur = loadWorkspace(id)
     saveWorkspace({ ...w, bounds: cur.bounds }, id)
   })
@@ -559,7 +569,8 @@ if (!gotLock) {
     if (process.platform !== 'darwin') app.quit()
   })
 
-  app.on('before-quit', () => {
+  app.on('before-quit', event => {
+    if (transfers.isBusy()) { event.preventDefault(); return }
     quitting = true
     persistWindowList()
     popouts.closeAll()

@@ -17,9 +17,20 @@ import CloseSessionDialog from './components/CloseSessionDialog'
 import NewSessionDialog from './components/NewSessionDialog'
 import RestoreSessionDialog from './components/RestoreSessionDialog'
 import Walkthrough from './components/Walkthrough'
+import { connectWindowTransfers } from './lib/window-transfers'
+import LaunchRecovery from './components/LaunchRecovery'
+import MoveSessionDialog from './components/MoveSessionDialog'
+import PresetsDialog from './components/PresetsDialog'
 import LinkSessionDialog from './components/LinkSessionDialog'
 
 export default function App(): React.JSX.Element {
+  const transferBusy = useStore(s => s.transferBusy)
+  const moveSessionId = useStore(s => s.moveSessionId)
+  const presetsOpen = useStore(s => s.presetsOpen)
+  const [transferHover, setTransferHover] = useState(false)
+  useEffect(connectWindowTransfers, [])
+  useEffect(() => window.buddy.workspace.onTransferHover(setTransferHover), [])
+  useEffect(() => window.buddy.library.onChanged(library => useStore.setState({ library })), [])
   const ready = useStore((s) => s.ready)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const paletteOpen = useStore((s) => s.paletteOpen)
@@ -145,7 +156,7 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (useStore.getState().pendingCloseId || useStore.getState().newSessionOpen || useStore.getState().restoreItems || useStore.getState().restoring || useStore.getState().walkthroughOpen || useStore.getState().linkSessionId) return
+      if (useStore.getState().transferBusy || useStore.getState().moveSessionId || useStore.getState().presetsOpen || useStore.getState().pendingCloseId || useStore.getState().newSessionOpen || useStore.getState().restoreItems || useStore.getState().restoring || useStore.getState().walkthroughOpen || useStore.getState().linkSessionId) return
       if (e.key === 'Escape' && searchOpen) {
         setSearchOpen(false)
         const id = useStore.getState().activeId
@@ -293,6 +304,11 @@ export default function App(): React.JSX.Element {
       </div>
 
       {broadcast && <div className="broadcast-strip">Broadcast on — every keystroke goes to all terminals</div>}
+      {!newSessionOpen && !presetsOpen && <div className="launch-error-banner"><LaunchRecovery /></div>}
+      {transferHover && <div className="transfer-hover">Release to move this terminal here</div>}
+      {transferBusy && <div className="transfer-busy" role="status">Moving terminals…</div>}
+      {moveSessionId && <MoveSessionDialog id={moveSessionId} />}
+      {presetsOpen && <PresetsDialog />}
       {paletteOpen && <Palette />}
       {settingsOpen && <SettingsPanel />}
       <CloseSessionDialog />
