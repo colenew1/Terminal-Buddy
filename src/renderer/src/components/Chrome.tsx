@@ -1,6 +1,18 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import { shortPath } from '../lib/format'
+import { fleetStatus } from '../lib/copy'
+import Buddy, { type Mood } from './Buddy'
+
+/** Fleet state, condensed to one of the buddy's four faces. */
+export function useMood(): { mood: Mood; busy: number; waiting: number; total: number } {
+  const sessions = useStore((s) => s.sessions)
+  const total = sessions.length
+  const busy = sessions.filter((s) => s.busy).length
+  const waiting = sessions.filter((s) => s.attention).length
+  const mood: Mood = total === 0 ? 'asleep' : waiting > 0 ? 'alert' : busy > 0 ? 'working' : 'calm'
+  return { mood, busy, waiting, total }
+}
 
 export function TopBar(): React.JSX.Element {
   const layout = useStore((s) => s.layout)
@@ -11,14 +23,29 @@ export function TopBar(): React.JSX.Element {
   const toggleBroadcast = useStore((s) => s.toggleBroadcast)
   const setSettingsOpen = useStore((s) => s.setSettingsOpen)
   const setPalette = useStore((s) => s.setPalette)
-  const count = useStore((s) => s.sessions.length)
+  const notify = useStore((s) => s.notify)
+  const { mood, busy, waiting, total } = useMood()
+
+  const status = fleetStatus(total, busy, waiting)
 
   return (
     <div className="topbar">
       <div className="brand">
-        <span className="brand-mark" />
+        <Buddy
+          mood={mood}
+          title={status}
+          onClick={() => {
+            const first = useStore.getState().sessions.find((s) => s.attention)
+            if (first) {
+              useStore.getState().setActive(first.id)
+              notify(`Taking you to ${first.critter.emoji} ${first.title}`)
+            } else {
+              notify(status)
+            }
+          }}
+        />
         <span className="brand-name">Terminal Buddy</span>
-        <span className="brand-count">{count} open</span>
+        <span className={`brand-status ${waiting ? 'is-waiting' : ''}`}>{status}</span>
       </div>
 
       <div className="topbar-actions">
@@ -85,12 +112,17 @@ export function TabBar(): React.JSX.Element {
         {sessions.map((s, i) => (
           <div
             key={s.id}
-            className={`tab ${s.id === activeId ? 'is-active' : ''} ${s.status === 'exited' ? 'is-exited' : ''}`}
+            className={`tab ${s.id === activeId ? 'is-active' : ''} ${s.status === 'exited' ? 'is-exited' : ''} ${s.attention ? 'wants-you' : ''}`}
+            style={settings.critters ? { ['--critter' as string]: `hsl(${s.critter.hue} 70% 62%)` } : undefined}
             onMouseDown={() => setActive(s.id)}
             onDoubleClick={() => setEditing(s.id)}
-            title={`${s.cwd}\n${s.shellLabel} · pid ${s.pid}`}
+            title={`${settings.critters ? `the ${s.critter.name} — ` : ''}${s.cwd}\n${s.shellLabel} · pid ${s.pid}`}
           >
-            <span className="tab-index">{i + 1}</span>
+            {settings.critters ? (
+              <span className="tab-critter">{s.critter.emoji}</span>
+            ) : (
+              <span className="tab-index">{i + 1}</span>
+            )}
             {editing === s.id ? (
               <input
                 className="tab-rename"

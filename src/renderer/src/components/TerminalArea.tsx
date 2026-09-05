@@ -3,6 +3,8 @@ import TerminalPane from './TerminalPane'
 import { useStore } from '../store/useStore'
 import { fitAll, focus as focusTerm } from '../lib/terminals'
 import { shortPath } from '../lib/format'
+import { randomTip } from '../lib/copy'
+import Buddy from './Buddy'
 
 /** Roughly square, biased to wider rows — terminals want columns more than lines. */
 function gridColumns(n: number): number {
@@ -32,10 +34,9 @@ export default function TerminalArea(): React.JSX.Element {
     return (
       <div className="empty">
         <div className="empty-card">
-          <h2>No terminals open</h2>
-          <p>
-            Open a folder, or right-click any folder in Explorer and choose <b>Open in Buddy</b>.
-          </p>
+          <Buddy mood="asleep" size={72} title="Nothing to do" />
+          <h2>Nothing open. I&rsquo;ll wait.</h2>
+          <p>Point me at a folder and I&rsquo;ll get a terminal going.</p>
           <div className="empty-actions">
             <button
               className="btn primary"
@@ -47,9 +48,10 @@ export default function TerminalArea(): React.JSX.Element {
               Open folder…
             </button>
             <button className="btn" onClick={() => useStore.getState().setSidebar(true, 'chats')}>
-              Browse chats
+              Pick up an old chat
             </button>
           </div>
+          <p className="empty-tip">{randomTip()}</p>
         </div>
       </div>
     )
@@ -70,7 +72,14 @@ export default function TerminalArea(): React.JSX.Element {
         return (
           <div key={s.id} className={`cell ${active ? 'is-active' : ''} ${visible ? '' : 'is-stacked'}`}>
             {layout === 'grid' && (
-              <div className="cell-head" onMouseDown={() => setActive(s.id)}>
+              <div
+                className="cell-head"
+                style={{ ['--critter' as string]: `hsl(${s.critter.hue} 70% 62%)` }}
+                onMouseDown={() => setActive(s.id)}
+              >
+                <span className="cell-critter" title={`the ${s.critter.name}`}>
+                  {s.critter.emoji}
+                </span>
                 <span className="cell-index">{i + 1}</span>
                 <span className="cell-title" title={s.cwd}>
                   {s.title}

@@ -2,6 +2,7 @@
   <img src="build/icon.png" width="96" alt="Terminal Buddy" />
   <h1>Terminal Buddy</h1>
   <p><b>A terminal manager for people running too many coding agents at once.</b></p>
+  <p><i>With a buddy who tells you which one needs you.</i></p>
   <p>Tabs or grid. Right-click any folder → <i>Open in Buddy</i>. Plus a browsable catalog of every Claude&nbsp;Code and Codex skill and past chat on your machine — so you can resume work instead of hunting for it.</p>
 </div>
 
@@ -17,6 +18,11 @@ If you keep six or eight terminals open across as many projects, two things go w
 It is a personal tool, published in case it's useful. There is no telemetry, no account, and no server — everything reads from your local disk.
 
 ## Features
+
+**The buddy**
+- A small creature in the title bar whose mood is real state, not decoration: **asleep** with nothing open, **calm** when all is quiet, **working** while output streams, and visibly **agitated** the moment a pane starts waiting on you. Click it to jump straight to whichever pane that is.
+- Five themes — Midnight, Grove, Ember, Bubblegum and Paper (light) — each covering the chrome *and* the terminal palette, so switching never leaves the two halves mismatched.
+- **Critters.** Every terminal gets an animal and a hue. Six tabs in the same folder all read `Owner`; one of them is the otter. It is the difference between counting tabs and recognising them.
 
 **Terminals**
 - 1–16 panes, switchable between **tabs** and **grid** at any time (`Ctrl+Shift+G`)
@@ -35,6 +41,19 @@ It is a personal tool, published in case it's useful. There is no telemetry, no 
 - **Open in Buddy** on any folder in Explorer
 - A `buddy` command for your PATH — `buddy` opens the current folder, `buddy <path>` opens that one
 - Opening a second folder adds a tab to the running window instead of launching another copy
+
+## Turning the whimsy down
+
+All of it is in **Settings → Look and feel**, and none of it is load-bearing:
+
+| Setting | Effect |
+| --- | --- |
+| **Theme** | Five palettes. Pick Paper for daylight, Midnight to keep it sober. |
+| **Critters** | Off, and tabs go back to plain numbers. |
+| **Chime** | Two soft synthesised notes when a pane starts waiting. **Off by default** — a notification you did not ask for is worse than none. |
+| **Calm mode** | Stills every animation, buddy included. |
+
+`prefers-reduced-motion` is honoured whether or not Calm mode is on. The tone lives in one file, `src/renderer/src/lib/copy.ts`, so it can be flattened in a single edit — and the rule it follows is that the chrome can have a personality while the data never does: counts, paths, ids and errors are always literal.
 
 ## Install
 
@@ -133,12 +152,12 @@ npm run build       # compile to out/
 npm test            # typecheck + build + all three suites below
 ```
 
-The tests drive the **real application**, not mocks:
+The tests drive the **real application**, not mocks — 29 assertions across three suites:
 
 | Script | What it proves |
 | --- | --- |
-| `npm run test:smoke` | Boots the app over the Chrome DevTools Protocol, spawns a pty and round-trips `echo` through it, confirms the catalog indexed real skills/chats/projects, toggles the sidebar and grid, saves a screenshot. 13 assertions. |
-| `npm run test:grid` | Opens 6 terminals, tiles them, checks every pane has real geometry, and waits for the attention badges to fire. |
+| `npm run test:smoke` | Boots the app over the Chrome DevTools Protocol, spawns a pty and round-trips `echo` through it, confirms the catalog indexed real skills/chats/projects, toggles the sidebar and grid, saves a screenshot. |
+| `npm run test:grid` | Opens 6 terminals, tiles them, checks every pane has real geometry and a unique critter, and waits for the attention badges — and the buddy's mood — to react. |
 | `npm run test:registry` | Round-trips the generated `.reg` through the real `reg.exe` under a scratch key (paths with spaces and all), then deletes it. |
 
 Set `BUDDY_EXE` to point the harness at a packaged build instead of `out/`:

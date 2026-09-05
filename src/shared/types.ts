@@ -18,6 +18,8 @@ export interface SessionSpec {
   title?: string
   /** Typed into the shell once it is ready (used by "resume this chat"). */
   initialCommand?: string
+  /** Renderer-only: restore a specific critter instead of picking a fresh one. */
+  critter?: string
 }
 
 /** What main returns once the pty is alive. */
@@ -121,6 +123,14 @@ export interface Settings {
   codexResumeCommand: string
   /** Extra folders to scan for project-level `.claude/skills`. */
   extraSkillRoots: string[]
+  /** Palette id from lib/themes.ts. */
+  theme: string
+  /** Give each terminal a critter so panes in the same folder stay tellable apart. */
+  critters: boolean
+  /** Soft chime when a pane starts waiting on you. */
+  chime: boolean
+  /** Stills every animation, including the buddy. */
+  reduceMotion: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -136,13 +146,19 @@ export const DEFAULT_SETTINGS: Settings = {
   copyOnSelect: false,
   claudeResumeCommand: 'claude --resume {id}',
   codexResumeCommand: 'codex resume {id}',
-  extraSkillRoots: []
+  extraSkillRoots: [],
+  theme: 'midnight',
+  critters: true,
+  chime: false,
+  reduceMotion: false
 }
 
 export interface PersistedSession {
   cwd: string
   shellId: string
   title: string
+  /** Restored so a pane keeps its critter across launches. */
+  critter?: string
 }
 
 export interface WindowBounds {

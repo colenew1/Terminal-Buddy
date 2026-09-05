@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { IntegrationStatus } from '@shared/types'
 import { useStore } from '../store/useStore'
 import { SHORTCUT_HELP } from '../lib/shortcuts'
+import { THEMES } from '../lib/themes'
+import Buddy from './Buddy'
 
 export default function SettingsPanel(): React.JSX.Element {
   const settings = useStore((s) => s.settings)
@@ -129,6 +131,76 @@ export default function SettingsPanel(): React.JSX.Element {
                 onChange={(e) => void setSettings({ attentionDelayMs: Number(e.target.value) || 1200 })}
               />
             </label>
+          </section>
+
+          <section>
+            <h4>Look and feel</h4>
+            <div className="themes">
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  className={`theme-card ${settings.theme === t.id ? 'is-on' : ''}`}
+                  onClick={() => void setSettings({ theme: t.id })}
+                  title={t.blurb}
+                >
+                  <span
+                    className="theme-swatch"
+                    style={{ background: `linear-gradient(135deg, ${t.swatch[0]}, ${t.swatch[1]})` }}
+                  />
+                  <span className="theme-name">{t.name}</span>
+                  <span className="theme-blurb">{t.blurb}</span>
+                </button>
+              ))}
+            </div>
+
+            <label className="field">
+              <span>
+                Critters
+                <small>Gives every terminal an animal, so panes in the same folder stay tellable apart.</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.critters}
+                onChange={(e) => void setSettings({ critters: e.target.checked })}
+              />
+            </label>
+
+            <label className="field">
+              <span>
+                Chime when a terminal wants you
+                <small>Two soft notes. Nothing else makes a sound.</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.chime}
+                onChange={(e) => void setSettings({ chime: e.target.checked })}
+              />
+            </label>
+
+            <label className="field">
+              <span>
+                Calm mode
+                <small>Stops every animation, buddy included.</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.reduceMotion}
+                onChange={(e) => void setSettings({ reduceMotion: e.target.checked })}
+              />
+            </label>
+
+            <div className="buddy-preview">
+              <div>
+                <b>Your buddy</b>
+                <div className="muted">Asleep · calm · working · needs you</div>
+              </div>
+              <div className="buddy-row">
+                <Buddy mood="asleep" size={30} title="Nothing open" />
+                <Buddy mood="calm" size={30} title="All quiet" />
+                <Buddy mood="working" size={30} title="Output streaming" />
+                <Buddy mood="alert" size={30} title="A pane went quiet" />
+              </div>
+            </div>
           </section>
 
           <section>

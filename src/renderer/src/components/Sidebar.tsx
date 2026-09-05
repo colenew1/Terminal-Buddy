@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatEntry, SkillEntry } from '@shared/types'
 import { useStore, type SidebarTab } from '../store/useStore'
 import { bytes, fuzzy, shortPath, timeAgo } from '../lib/format'
+import { scanLine } from '../lib/copy'
 import ChatDetail from './ChatDetail'
 
 const TABS: { id: SidebarTab; label: string }[] = [
@@ -137,14 +138,16 @@ export default function Sidebar(): React.JSX.Element {
           <div className="progress">
             <div className="progress-bar" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
             <span>
-              {progress.phase === 'skills' ? 'Reading skills…' : `Indexing transcripts ${progress.done}/${progress.total}`}
+              {progress.phase === 'skills'
+                ? 'Leafing through your skills…'
+                : `${scanLine(Math.floor(progress.done / 25))} ${progress.done}/${progress.total}`}
             </span>
           </div>
         )}
       </div>
 
       <div className="sidebar-body">
-        {!catalog && !loading && <div className="hint">Nothing indexed yet. Hit Rescan.</div>}
+        {!catalog && !loading && <div className="hint">Nothing indexed yet — hit Rescan and I&rsquo;ll go looking.</div>}
 
         {tab === 'chats' &&
           chats.map((c) => (

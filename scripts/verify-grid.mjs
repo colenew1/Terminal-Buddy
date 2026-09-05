@@ -100,11 +100,23 @@ try {
   const distinct = new Set(panes.map((p) => `${p.w}x${p.h}`))
   check('panes tile rather than stack', panes[0].w < 1300, `widths: ${[...distinct].join(', ')}`)
 
+  // Six tabs in the same folder are all called the same thing; the critter is
+  // the only thing telling them apart, so it must be unique per pane.
+  const critters = await ev(`[...document.querySelectorAll('.tab-critter')].map(e => e.textContent)`)
+  check('every pane has a critter', critters.length === WANT, critters.join(' '))
+  check('critters are unique', new Set(critters).size === critters.length)
+
+  const hues = await ev(`[...document.querySelectorAll('.tab')].map(t => t.style.getPropertyValue('--critter'))`)
+  check('critters carry distinct hues', new Set(hues).size === hues.length && hues.every(Boolean))
+
   // Every shell printed a prompt and then fell silent, so the inactive panes
   // should have tripped the attention badge.
   await sleep(2500)
   const badges = await ev(`document.querySelectorAll('.dot.attention').length`)
   check('attention badges fire on quiet panes', badges > 0, `${badges} flagged`)
+
+  const mood = await ev(`document.querySelector('.buddy')?.className ?? ''`)
+  check('buddy reacts to panes needing you', mood.includes('buddy-alert'), mood)
 
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(OUT, Buffer.from(shot.data, 'base64'))

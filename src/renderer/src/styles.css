@@ -8,10 +8,12 @@
   --fg-dim: #8b95a5;
   --fg-faint: #626c7a;
   --accent: #6ea8fe;
+  --accent-2: #a78bfa;
   --accent-dim: #2c4a6e;
   --warn: #f0c674;
   --danger: #f2777a;
   --ok: #8fce7f;
+  --scrim: rgba(6, 8, 12, 0.62);
   --radius: 6px;
   --mono: 'Cascadia Mono', 'JetBrains Mono', Consolas, 'Courier New', monospace;
 }
@@ -77,7 +79,7 @@ body.resizing {
   width: 14px;
   height: 14px;
   border-radius: 4px;
-  background: linear-gradient(135deg, var(--accent), #a78bfa);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
   flex: none;
 }
 
@@ -125,12 +127,12 @@ body.resizing {
 
 .icon-btn.is-on {
   background: var(--accent-dim);
-  color: #cfe2ff;
+  color: var(--fg);
 }
 
 .icon-btn.is-danger {
-  background: #5b2a2c;
-  color: #ffc9ca;
+  background: color-mix(in srgb, var(--danger) 32%, var(--bg));
+  color: var(--danger);
 }
 
 .icon-btn.tiny {
@@ -151,7 +153,7 @@ body.resizing {
 }
 
 .btn:hover:not(:disabled) {
-  background: #2c3340;
+  background: color-mix(in srgb, var(--fg) 10%, var(--bg-3));
 }
 
 .btn:disabled {
@@ -162,12 +164,12 @@ body.resizing {
 .btn.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0b1220;
+  color: var(--bg);
   font-weight: 600;
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: #85b6ff;
+  background: color-mix(in srgb, var(--fg) 18%, var(--accent));
 }
 
 .btn.tiny {
@@ -214,7 +216,7 @@ body.resizing {
 
 .seg button.is-on {
   background: var(--accent-dim);
-  color: #cfe2ff;
+  color: var(--fg);
 }
 
 .seg-count {
@@ -232,7 +234,6 @@ body.resizing {
 
 .dot.attention {
   background: var(--warn);
-  box-shadow: 0 0 0 3px rgba(240, 198, 116, 0.16);
 }
 
 .dot.unseen {
@@ -251,18 +252,18 @@ body.resizing {
 }
 
 .badge.claude {
-  background: #3b2f22;
-  color: #e8b782;
+  background: color-mix(in srgb, #d98b3f 22%, var(--bg-2));
+  color: color-mix(in srgb, #d98b3f 78%, var(--fg));
 }
 
 .badge.codex {
-  background: #22323b;
-  color: #82cfe8;
+  background: color-mix(in srgb, #3fa8d9 22%, var(--bg-2));
+  color: color-mix(in srgb, #3fa8d9 78%, var(--fg));
 }
 
 .badge.gone {
-  background: #4a2626;
-  color: #f2a1a3;
+  background: color-mix(in srgb, var(--danger) 22%, var(--bg-2));
+  color: var(--danger);
 }
 
 .mono {
@@ -371,7 +372,7 @@ body.resizing {
 .tab.is-active {
   background: var(--bg-3);
   border-color: var(--accent-dim);
-  color: #fff;
+  color: var(--fg);
 }
 
 .tab.is-exited {
@@ -419,8 +420,8 @@ body.resizing {
 }
 
 .tab-close:hover {
-  background: #5b2a2c;
-  color: #fff;
+  background: color-mix(in srgb, var(--danger) 32%, var(--bg));
+  color: var(--danger);
 }
 
 .tab-new {
@@ -549,8 +550,8 @@ body.resizing {
   position: absolute;
   right: 8px;
   bottom: 6px;
-  background: #3a2224;
-  color: #f2a1a3;
+  background: color-mix(in srgb, var(--danger) 26%, var(--bg));
+  color: var(--danger);
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 11px;
@@ -772,7 +773,7 @@ body.resizing {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(6, 8, 12, 0.62);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1087,8 +1088,8 @@ kbd {
   bottom: 0;
   left: 0;
   right: 0;
-  background: #5b2a2c;
-  color: #ffd7d8;
+  background: color-mix(in srgb, var(--danger) 60%, var(--bg));
+  color: var(--bg);
   text-align: center;
   font-size: 11px;
   padding: 3px;
@@ -1117,15 +1118,295 @@ kbd {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #333a47;
+  background: color-mix(in srgb, var(--fg) 22%, var(--bg-1));
   border-radius: 5px;
   border: 2px solid var(--bg-1);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #414a59;
+  background: color-mix(in srgb, var(--fg) 34%, var(--bg-1));
 }
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+
+/* =========================================================== the buddy */
+
+.buddy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  user-select: none;
+  overflow: visible;
+}
+
+.buddy svg {
+  overflow: visible;
+}
+
+.buddy-body {
+  transform-origin: 20px 39px;
+  animation: buddy-bob 3.4s ease-in-out infinite;
+}
+
+.buddy-working .buddy-body { animation-duration: 1.6s; }
+
+.buddy-alert .buddy-body {
+  animation: buddy-hop 0.62s cubic-bezier(0.3, 0.9, 0.4, 1) infinite;
+}
+
+.buddy-eyes {
+  transform-origin: 20px 22px;
+  animation: buddy-blink 5.2s infinite;
+}
+
+.buddy-working .buddy-pupils {
+  animation: buddy-dart 1.9s ease-in-out infinite;
+}
+
+.buddy-bulb {
+  animation: buddy-glow 3s ease-in-out infinite;
+}
+
+.buddy-alert .buddy-bulb {
+  animation: buddy-glow 0.7s ease-in-out infinite;
+}
+
+.buddy-asleep .buddy-antenna { opacity: 0.45; }
+
+.buddy-zzz text {
+  animation: buddy-float 2.8s ease-in-out infinite;
+}
+
+.buddy-zzz text:last-child { animation-delay: 0.7s; }
+
+.buddy-bang { animation: buddy-pop 0.62s ease-in-out infinite; transform-origin: 32px 12px; }
+
+.buddy.is-poked svg { animation: buddy-wiggle 0.7s ease-in-out; }
+
+@keyframes buddy-bob {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(-1.4px) scaleY(1.015); }
+}
+
+@keyframes buddy-hop {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  35% { transform: translateY(-3.4px) scaleY(1.05); }
+  70% { transform: translateY(0.6px) scaleY(0.95); }
+}
+
+@keyframes buddy-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.08); }
+}
+
+@keyframes buddy-dart {
+  0%, 100% { transform: translateX(-1.5px); }
+  50% { transform: translateX(1.5px); }
+}
+
+@keyframes buddy-glow {
+  0%, 100% { opacity: 0.55; r: 3.2; }
+  50% { opacity: 1; r: 3.8; }
+}
+
+@keyframes buddy-float {
+  0% { opacity: 0; transform: translate(0, 2px); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translate(2px, -6px); }
+}
+
+@keyframes buddy-pop {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.13); }
+}
+
+@keyframes buddy-wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-13deg); }
+  60% { transform: rotate(11deg); }
+  85% { transform: rotate(-4deg); }
+}
+
+.brand-status {
+  color: var(--fg-faint);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brand-status.is-waiting {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+/* ============================================================ critters */
+
+.tab {
+  box-shadow: inset 2px 0 0 var(--critter, transparent);
+  animation: tab-in 0.24s ease-out;
+}
+
+.tab-critter {
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+  filter: saturate(1.1);
+}
+
+.tab.wants-you {
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg-2));
+}
+
+.cell-critter {
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+}
+
+.cell-head {
+  box-shadow: inset 2px 0 0 var(--critter, transparent);
+}
+
+@keyframes tab-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The badge that actually matters — make it breathe. */
+.dot.attention {
+  animation: dot-pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 45%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--warn) 0%, transparent); }
+}
+
+/* ====================================================== boot and empty */
+
+.boot-greeting {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.boot-sub {
+  color: var(--fg-faint);
+  font-size: 12px;
+  margin-top: -6px;
+}
+
+.empty-card .buddy {
+  margin: 0 auto 14px;
+  display: block;
+}
+
+.empty-tip {
+  margin-top: 20px;
+  color: var(--fg-faint);
+  font-size: 11px;
+}
+
+/* ============================================================== themes */
+
+.themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  color: var(--fg);
+  transition: border-color 0.14s, transform 0.14s;
+}
+
+.theme-card:hover { transform: translateY(-2px); }
+
+.theme-card.is-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.theme-swatch {
+  height: 22px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.theme-name { font-weight: 600; font-size: 12px; }
+.theme-blurb { color: var(--fg-faint); font-size: 10px; line-height: 1.35; }
+
+.buddy-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-top: 12px;
+}
+
+.buddy-row { display: flex; gap: 14px; align-items: center; }
+.buddy-preview .muted { font-size: 11px; margin-top: 2px; }
+
+/* ========================================================= transitions */
+
+.palette, .modal {
+  animation: pop-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.toast {
+  animation: toast-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.sidebar {
+  animation: slide-in 0.18s ease-out;
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.97) translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Calm mode, and anyone whose OS already asked for less movement. */
+.no-motion *,
+.no-motion *::before,
+.no-motion *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

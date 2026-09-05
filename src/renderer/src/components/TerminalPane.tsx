@@ -8,29 +8,9 @@ import '@xterm/xterm/css/xterm.css'
 import { useStore, type Session } from '../store/useStore'
 import { fitOne, register, unregister, get as getTerm } from '../lib/terminals'
 import { matchShortcut } from '../lib/shortcuts'
+import { themeById } from '../lib/themes'
 
-const THEME = {
-  background: '#0f1115',
-  foreground: '#d5dae3',
-  cursor: '#6ea8fe',
-  cursorAccent: '#0f1115',
-  selectionBackground: '#2c4a6e',
-  black: '#2a2f3a',
-  red: '#f2777a',
-  green: '#8fce7f',
-  yellow: '#f0c674',
-  blue: '#6ea8fe',
-  magenta: '#c397d8',
-  cyan: '#70c0ba',
-  white: '#c9d1d9',
-  brightBlack: '#5c6672',
-  brightRed: '#ff8b8e',
-  brightGreen: '#a6e394',
-  brightYellow: '#ffd98a',
-  brightMagenta: '#d7b0e8',
-  brightCyan: '#8ad7d1',
-  brightWhite: '#f0f4f8'
-}
+
 
 interface Props {
   session: Session
@@ -60,7 +40,7 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
       cursorBlink: st.cursorBlink,
       allowProposedApi: true,
       macOptionIsMeta: true,
-      theme: THEME
+      theme: themeById(st.theme).terminal
     })
 
     const fit = new FitAddon()
@@ -121,8 +101,9 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
     h.term.options.fontFamily = settings.fontFamily
     h.term.options.scrollback = settings.scrollback
     h.term.options.cursorBlink = settings.cursorBlink
+    h.term.options.theme = themeById(settings.theme).terminal
     fitOne(id)
-  }, [id, settings.fontSize, settings.fontFamily, settings.scrollback, settings.cursorBlink])
+  }, [id, settings.fontSize, settings.fontFamily, settings.scrollback, settings.cursorBlink, settings.theme])
 
   // One observer per pane. Coalesced through rAF so a sidebar drag does not
   // fire a pty resize per frame.

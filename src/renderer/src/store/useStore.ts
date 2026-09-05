@@ -8,6 +8,8 @@ import {
   type Settings,
   type ShellDef
 } from '@shared/types'
+import { pickCritter, CRITTERS, type Critter } from '../lib/critters'
+import { applyTheme } from '../lib/themes'
 
 export interface Session {
   id: string
@@ -23,6 +25,7 @@ export interface Session {
   busy: boolean
   attention: boolean
   unseen: boolean
+  critter: Critter
 }
 
 export type SidebarTab = 'chats' | 'skills' | 'projects'
@@ -110,6 +113,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       ? settings.defaultShellId
       : shells[0]?.id
 
+    applyTheme(settings.theme)
     set({
       shells,
       settings: { ...settings, defaultShellId },
@@ -119,7 +123,7 @@ export const useStore = create<State & Actions>((set, get) => ({
 
     if (settings.restoreOnLaunch && workspace.sessions.length) {
       for (const s of workspace.sessions) {
-        await get().openSession({ cwd: s.cwd, shellId: s.shellId, title: s.title })
+        await get().openSession({ cwd: s.cwd, shellId: s.shellId, title: s.title, critter: s.critter })
       }
     }
     if (get().sessions.length === 0) {
@@ -140,8 +144,11 @@ export const useStore = create<State & Actions>((set, get) => ({
         ...spec,
         shellId: spec.shellId ?? settings.defaultShellId
       })
+      const saved = spec.critter ? CRITTERS.find((c) => c.name === spec.critter) : undefined
+      const critter = saved ?? pickCritter(sessions.map((x) => x.critter.name))
       const session: Session = {
         ...info,
+        critter,
         status: 'running',
         lastDataAt: 0,
         busy: false,
@@ -244,6 +251,7 @@ export const useStore = create<State & Actions>((set, get) => ({
 
   async setSettings(patch) {
     const settings = { ...get().settings, ...patch }
+    if (patch.theme) applyTheme(patch.theme)
     set({ settings })
     await window.buddy.settings.set(settings)
   },
@@ -293,7 +301,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       void window.buddy.workspace.set({
         sessions: sessions
           .filter((s) => s.status === 'running')
-          .map((s) => ({ cwd: s.cwd, shellId: s.shellId, title: s.title })),
+          .map((s) => ({ cwd: s.cwd, shellId: s.shellId, title: s.title, critter: s.critter.name })),
         layout
       })
     }, 400)

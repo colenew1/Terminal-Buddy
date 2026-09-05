@@ -7,6 +7,9 @@ import SettingsPanel from './components/SettingsPanel'
 import { useStore } from './store/useStore'
 import { matchShortcut } from './lib/shortcuts'
 import { get as getTerm, writeTo } from './lib/terminals'
+import { greeting } from './lib/copy'
+import { chime } from './lib/chime'
+import Buddy from './components/Buddy'
 
 export default function App(): React.JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -15,6 +18,9 @@ export default function App(): React.JSX.Element {
   const settingsOpen = useStore((s) => s.settingsOpen)
   const broadcast = useStore((s) => s.broadcast)
   const toast = useStore((s) => s.toast)
+  const settings = useStore((s) => s.settings)
+  const waiting = useStore((s) => s.sessions.filter((x) => x.attention).length)
+  const prevWaiting = useRef(0)
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -47,6 +53,11 @@ export default function App(): React.JSX.Element {
       offFolder()
     }
   }, [])
+
+  useEffect(() => {
+    if (settings.chime && waiting > prevWaiting.current) chime()
+    prevWaiting.current = waiting
+  }, [waiting, settings.chime])
 
   // Drives the "went quiet, probably waiting on you" badge.
   useEffect(() => {
@@ -147,14 +158,15 @@ export default function App(): React.JSX.Element {
   if (!ready) {
     return (
       <div className="boot">
-        <div className="brand-mark big" />
-        <span>Starting Terminal Buddy…</span>
+        <Buddy mood="calm" size={84} />
+        <span className="boot-greeting">{greeting()}</span>
+        <span className="boot-sub">Waking up the buddy…</span>
       </div>
     )
   }
 
   return (
-    <div className={`app ${broadcast ? 'is-broadcast' : ''}`}>
+    <div className={`app ${broadcast ? 'is-broadcast' : ''} ${settings.reduceMotion ? 'no-motion' : ''}`}>
       <TopBar />
       <div className="body">
         {sidebarOpen && <Sidebar />}
