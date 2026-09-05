@@ -569,6 +569,6 @@ export function buildMarkdown(t: ChatTranscript, resumeCommand: string): string 
   for (const turn of t.turns) {
     body.push(`## ${turn.role === 'user' ? 'User' : 'Assistant'}${turn.ts ? ` — ${iso(turn.ts)}` : ''}`, '', turn.text, '')
   }
-  if (t.truncated) body.push('---', '', '_Transcript truncated by Terminal Buddy._')
+  if (t.truncated) body.push('---', '', '_Transcript truncated by Coop._')
   return [...head, ...body].join('\n')
 }

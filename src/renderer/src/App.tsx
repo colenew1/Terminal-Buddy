@@ -48,6 +48,12 @@ export default function App(): React.JSX.Element {
     const offFolder = window.buddy.app.onOpenFolder((dir) => {
       void useStore.getState().openSession({ cwd: dir })
     })
+    const offFeed = window.buddy.feed.onEvents((id, events) =>
+      useStore.getState().addFeedEvents(id, events)
+    )
+    const offAgent = window.buddy.feed.onAgent((id, agent) =>
+      useStore.setState((s) => ({ agents: { ...s.agents, [id]: agent } }))
+    )
     const offNew = window.buddy.app.onNewTerminal(() => {
       const s = useStore.getState()
       const active = s.sessions.find((x) => x.id === s.activeId)
@@ -59,6 +65,8 @@ export default function App(): React.JSX.Element {
       offInfo()
       offProgress()
       offFolder()
+      offFeed()
+      offAgent()
       offNew()
     }
   }, [])

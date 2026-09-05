@@ -3,7 +3,7 @@
 export type LayoutMode = 'tabs' | 'grid'
 export type Agent = 'claude' | 'codex'
 
-/** A shell Terminal Buddy knows how to launch. Detected at startup. */
+/** A shell Coop knows how to launch. Detected at startup. */
 export interface ShellDef {
   id: string
   label: string
@@ -102,6 +102,16 @@ export interface ScanProgress {
   total: number
 }
 
+/** One line of a live agent conversation, parsed from its transcript. */
+export interface FeedEvent {
+  id: string
+  role: 'user' | 'assistant' | 'tool' | 'status'
+  text: string
+  /** For tool rows: the human verb, e.g. "Opened", "Ran". */
+  tool?: string
+  ts: number
+}
+
 export interface ChatTurn {
   role: 'user' | 'assistant'
   text: string
@@ -144,6 +154,10 @@ export interface Settings {
   reduceMotion: boolean
   /** Click in the command line to put the cursor there, instead of arrowing over. */
   clickToPosition: boolean
+  /** Show the raw terminal instead of the conversation. */
+  devMode: boolean
+  /** Emoji set used for pane critters. */
+  critterPack: string
   /** Keep an icon in the Windows notification area. */
   trayIcon: boolean
   /** Minimising hides to the tray instead of the taskbar. */
@@ -173,6 +187,8 @@ export const DEFAULT_SETTINGS: Settings = {
   chime: false,
   reduceMotion: false,
   clickToPosition: true,
+  devMode: false,
+  critterPack: 'forest',
   trayIcon: true,
   minimizeToTray: false,
   closeToTray: false

@@ -242,6 +242,14 @@ try {
   check('Ctrl+V pastes into the terminal', String(echoed).includes('PASTE_PROBE_42'),
     pasted ? JSON.stringify(String(echoed).slice(-40)) : 'no terminal textarea')
 
+  // Click-to-position acts on the terminal, which now sits behind the
+  // conversation, so lift the lid before driving it.
+  await evaluate(`[...document.querySelectorAll('.seg button')].find(b => b.textContent === 'Grid')?.click()`)
+  await sleep(900)
+  await evaluate(`[...document.querySelectorAll('.cell-head .icon-btn')].find(b => b.textContent === '</>')?.click()`)
+  await sleep(800)
+  check('dev toggle reveals the terminal', await evaluate(`!document.querySelector('.agent') && !!document.querySelector('.xterm')`))
+
   // Click-to-position: type a line, click five cells back, insert a marker and
   // confirm it landed mid-string rather than at the end. `#` keeps PowerShell
   // from actually running anything.

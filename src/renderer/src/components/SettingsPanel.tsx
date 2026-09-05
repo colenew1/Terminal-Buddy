@@ -3,6 +3,7 @@ import type { IntegrationStatus } from '@shared/types'
 import { useStore } from '../store/useStore'
 import { SHORTCUT_HELP } from '../lib/shortcuts'
 import { THEMES } from '../lib/themes'
+import { CRITTER_PACKS, packById } from '../lib/critters'
 import Buddy from './Buddy'
 
 export default function SettingsPanel(): React.JSX.Element {
@@ -171,12 +172,44 @@ export default function SettingsPanel(): React.JSX.Element {
             <label className="field">
               <span>
                 Critters
-                <small>Gives every terminal an animal, so panes in the same folder stay tellable apart.</small>
+                <small>Gives every pane a character, so cards from the same folder stay tellable apart.</small>
               </span>
               <input
                 type="checkbox"
                 checked={settings.critters}
                 onChange={(e) => void setSettings({ critters: e.target.checked })}
+              />
+            </label>
+
+            {settings.critters && (
+              <div className="packs">
+                {CRITTER_PACKS.map((pack) => (
+                  <button
+                    key={pack.id}
+                    className={`pack ${settings.critterPack === pack.id ? 'is-on' : ''}`}
+                    onClick={() => void setSettings({ critterPack: pack.id })}
+                  >
+                    <span className="pack-emoji">
+                      {pack.critters.slice(0, 5).map((c) => c.emoji).join(' ')}
+                    </span>
+                    <span className="pack-name">{pack.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <label className="field">
+              <span>
+                Developer mode
+                <small>
+                  Shows the raw terminal in every pane instead of the conversation. Individual cards have a
+                  &lt;/&gt; button for the same thing.
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.devMode}
+                onChange={(e) => void setSettings({ devMode: e.target.checked })}
               />
             </label>
 
@@ -265,7 +298,7 @@ export default function SettingsPanel(): React.JSX.Element {
             <label className="field">
               <span>
                 Notification area icon
-                <small>Keeps Terminal Buddy reachable while the window is closed.</small>
+                <small>Keeps Coop reachable while the window is closed.</small>
               </span>
               <input
                 type="checkbox"

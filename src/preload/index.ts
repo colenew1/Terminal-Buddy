@@ -3,6 +3,7 @@ import type {
   Catalog,
   ChatEntry,
   ChatTranscript,
+  FeedEvent,
   IntegrationStatus,
   OpResult,
   ScanProgress,
@@ -62,6 +63,14 @@ const api = {
     uninstallContextMenu: (): Promise<OpResult> => ipcRenderer.invoke('integration:uninstallContextMenu'),
     installCli: (): Promise<OpResult> => ipcRenderer.invoke('integration:installCli'),
     uninstallCli: (): Promise<OpResult> => ipcRenderer.invoke('integration:uninstallCli')
+  },
+
+  feed: {
+    attach: (sessionId: string, cwd: string): void => ipcRenderer.send('feed:attach', sessionId, cwd),
+    detach: (sessionId: string): void => ipcRenderer.send('feed:detach', sessionId),
+    onEvents: (cb: (sessionId: string, events: FeedEvent[]) => void): Unsub => on('feed:events', cb),
+    onAgent: (cb: (sessionId: string, agent: 'claude' | 'codex' | null) => void): Unsub =>
+      on('feed:agent', cb)
   },
 
   clipboard: {

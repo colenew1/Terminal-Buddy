@@ -1,5 +1,5 @@
 appId: com.terminalbuddy.app
-productName: Terminal Buddy
+productName: Coop
 copyright: MIT
 
 directories:
@@ -35,7 +35,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Terminal Buddy
+  shortcutName: Coop
 
 portable:
   artifactName: ${productName}-${version}-portable.${ext}

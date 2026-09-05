@@ -46,7 +46,7 @@ export function TopBar(): React.JSX.Element {
             }
           }}
         />
-        <span className="brand-name">Terminal Buddy</span>
+        <span className="brand-name">Coop</span>
         <span className={`brand-status ${waiting ? 'is-waiting' : ''}`}>{status}</span>
       </div>
 

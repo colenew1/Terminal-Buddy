@@ -1,7 +1,7 @@
 {
   "name": "terminal-buddy",
   "version": "0.1.0",
-  "description": "A terminal manager for people running too many agents at once. Tabs or grid, plus a browsable catalog of your Claude/Codex skills and past chats.",
+  "description": "A calm home for your coding agents. Conversations, not terminals \u2014 with the terminal still there when you want it.",
   "main": "./out/main/index.js",
   "author": "Terminal Buddy contributors",
   "license": "MIT",
@@ -15,10 +15,11 @@
     "dist": "electron-vite build && electron-builder --win nsis portable",
     "postinstall": "electron-builder install-app-deps",
     "icon": "python scripts/make-icon.py",
-    "test": "npm run typecheck && npm run build && npm run test:smoke && npm run test:grid && npm run test:registry",
+    "test": "npm run typecheck && npm run build && npm run test:smoke && npm run test:feed && npm run test:grid && npm run test:registry",
     "test:smoke": "node scripts/smoke.mjs",
     "test:grid": "node scripts/verify-grid.mjs",
-    "test:registry": "node scripts/verify-registry.mjs"
+    "test:registry": "node scripts/verify-registry.mjs",
+    "test:feed": "node scripts/verify-feed.mjs"
   },
   "dependencies": {
     "@lydell/node-pty": "1.2.0-beta.15",

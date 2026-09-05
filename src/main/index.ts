@@ -17,6 +17,7 @@ import { CatalogService, buildMarkdown } from './catalog'
 import { loadSettings, saveSettings, loadWorkspace, saveWorkspace, cacheFile } from './store'
 import { TrayController, setTaskbarBadge, setJumpList } from './tray'
 import { probeAgents } from './agents'
+import { FeedService } from './session-feed'
 import {
   installCli,
   installContextMenu,
@@ -40,6 +41,7 @@ const ptys = new PtyManager(shells)
 let win: BrowserWindow | null = null
 let catalog: CatalogService | null = null
 let tray: TrayController | null = null
+let feeds: FeedService | null = null
 /** Distinguishes "user closed the window" from "app is really quitting". */
 let quitting = false
 /** Folders requested before the renderer was ready to receive them. */
@@ -282,6 +284,13 @@ function registerIpc(): void {
 
   ipcMain.on('app:show', () => revealWindow())
 
+  feeds = new FeedService(
+    (sessionId, events) => sendToRenderer('feed:events', sessionId, events),
+    (sessionId, agent) => sendToRenderer('feed:agent', sessionId, agent)
+  )
+  ipcMain.on('feed:attach', (_e, sessionId: string, cwd: string) => feeds?.attach(sessionId, cwd))
+  ipcMain.on('feed:detach', (_e, sessionId: string) => feeds?.detach(sessionId))
+
   ipcMain.handle('clipboard:read', () => clipboard.readText())
   ipcMain.on('clipboard:write', (_e, text: string) => clipboard.writeText(text))
 
@@ -379,6 +388,7 @@ if (!gotLock) {
   app.on('before-quit', () => {
     quitting = true
     tray?.dispose()
+    feeds?.dispose()
     ptys.killAll()
   })
 }

@@ -1595,3 +1595,297 @@ kbd {
 .cell-resize:hover {
   background: linear-gradient(135deg, transparent 0 40%, var(--warn) 40%);
 }
+
+
+/* ==================================================== the conversation view */
+
+/*
+ * Sits over the terminal, which stays mounted underneath. Everything here is
+ * deliberately soft-edged and text-first: the point is to look like somewhere
+ * you talk to an agent, not somewhere you drive a shell.
+ */
+.agent {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.agent-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+}
+
+.agent-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--fg-faint);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.agent-empty p {
+  margin: 0 0 2px;
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+
+.bubble {
+  max-width: 86%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  animation: bubble-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-bottom-right-radius: 5px;
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 5px;
+}
+
+.bubble-who {
+  font-size: 9px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin-bottom: 4px;
+}
+
+.bubble-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg);
+}
+
+/* Tool calls read as a sentence, never as the command that produced them. */
+.turn-tool {
+  align-self: flex-start;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--fg-faint);
+  padding: 1px 4px;
+  animation: bubble-in 0.22s ease-out;
+}
+
+.tool-verb {
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.tool-detail {
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60ch;
+}
+
+@keyframes bubble-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ------------------------------------------------------------- composer */
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-1);
+}
+
+.composer-input {
+  flex: 1;
+  resize: none;
+  max-height: 140px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: 12px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.composer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.composer-skill,
+.composer-send {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.composer-skill:hover {
+  color: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
+.composer-send {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+}
+
+.composer-send:disabled {
+  background: var(--bg-2);
+  border-color: var(--line);
+  color: var(--fg-faint);
+  cursor: default;
+}
+
+/* --------------------------------------------------------- skill chips */
+
+.skill-picker {
+  border-top: 1px solid var(--line);
+  background: var(--bg-1);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46%;
+}
+
+.skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--accent-2);
+  transform: translateY(-1px);
+}
+
+.chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fg-faint);
+}
+
+.chip-dot.claude { background: #d98b3f; }
+.chip-dot.codex { background: #3fa8d9; }
+
+/* ------------------------------------------------- tiles that got tiny */
+
+.agent.compact {
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 8px;
+  padding: 8px;
+  text-align: center;
+}
+
+.compact-critter {
+  font-size: 18px;
+}
+
+.compact-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ------------------------------------------------------- critter packs */
+
+.packs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.pack {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--fg);
+  transition: border-color 0.14s, transform 0.14s;
+}
+
+.pack:hover { transform: translateY(-2px); }
+
+.pack.is-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.pack-emoji {
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+
+.pack-name {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+
+
+.cell-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

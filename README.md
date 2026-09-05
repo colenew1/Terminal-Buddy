@@ -1,28 +1,58 @@
 <div align="center">
-  <img src="build/icon.png" width="96" alt="Terminal Buddy" />
-  <h1>Terminal Buddy</h1>
-  <p><b>A terminal manager for people running too many coding agents at once.</b></p>
-  <p><i>With a buddy who tells you which one needs you.</i></p>
-  <p>Tabs or grid. Right-click any folder → <i>Open in Buddy</i>. Plus a browsable catalog of every Claude&nbsp;Code and Codex skill and past chat on your machine — so you can resume work instead of hunting for it.</p>
+  <img src="build/icon.png" width="96" alt="Coop" />
+  <h1>Coop</h1>
+  <p><b>A calm home for your coding agents.</b></p>
+  <p><i>Conversations, not terminals — with the terminal still there when you want it.</i></p>
 </div>
 
 ---
 
 ## Why
 
-If you keep six or eight terminals open across as many projects, two things go wrong:
+Running several coding agents at once means running several terminals, and a terminal is a bad place to watch a conversation. You get ANSI redraw, spinners, boxes, and no idea which one is waiting on you.
 
-1. **You lose track of which one needs you.** Agents run for minutes, then quietly stop and wait. Terminal Buddy watches each pane's output and flags the ones that went silent.
-2. **You lose your old sessions.** Claude Code and Codex both keep every conversation on disk as JSONL, but there's no way to browse them. Terminal Buddy indexes them, shows you real titles and previews, and resumes any of them in a new terminal with one click.
+Coop puts the conversation first. Each agent is a **card**: what you said, what it said, and what it did — *"Opened src/index.ts"*, *"Ran npm test"* — instead of the commands that produced them. The terminal is still underneath, doing the work, one button away when you want it.
 
-It is a personal tool, published in case it's useful. There is no telemetry, no account, and no server — everything reads from your local disk.
+Three things it fixes:
+
+1. **You lose track of which one needs you.** Agents run for minutes, then quietly stop. Coop flags the ones that went silent.
+2. **You lose your old sessions.** Both CLIs keep every conversation on disk. Coop indexes them, and you can drop one onto a card to pick it up.
+3. **The terminal is in the way.** It's plumbing, not an interface.
+
+It is a personal tool, published in case it's useful. No telemetry, no account, no server — everything reads from your local disk.
+
+> Formerly *Terminal Buddy*. The buddy stayed; the terminal moved to the back.
+
+## How the conversation view works
+
+A terminal can't be the source of truth for this. Claude Code and Codex are full-screen TUIs, and scraping their redraws into clean turns is a losing game.
+
+But both already write a **structured JSONL transcript** of every session — the same files the catalog reads. So Coop finds the transcript a live pane is writing to, tails it, and renders that. The pty stays underneath for input and process lifetime; the transcript is what you see.
+
+That is what makes *"it just opens the file"* real rather than a mock: a `Read` tool call becomes **Opened src/index.ts**, because that is literally what the record says.
+
+A few consequences worth knowing:
+
+- **It discovers the agent by itself.** Nothing is declared up front — whichever CLI starts writing a transcript in that folder identifies itself by doing so. Typing `claude` by hand works exactly like resuming from the catalog.
+- **One transcript per card.** Two cards in the same folder won't mirror each other; a file already being followed is skipped.
+- **Only live sessions.** An old transcript sitting in the folder is ignored; it has to be actively written to.
+- **Plain shells still work.** No agent means no transcript, so the card is just a composer — type a command, press Enter.
+
+Press `</>` on any card, or turn on **Developer mode** in settings, to see the real terminal instead.
 
 ## Features
+
+**Cards, not panes**
+- Each agent is a conversation: your turns, its turns, and its actions in plain language
+- A composer at the bottom — type and press Enter; `Shift+Enter` for a new line
+- **✦ adds a skill** as a chip, or drag one in from the catalog; it goes to the agent as `/name`
+- Cards that get small collapse to just their name, because a two-inch conversation is nobody's friend
+- `</>` on any card shows the raw terminal
 
 **The buddy**
 - A small creature in the title bar whose mood is real state, not decoration: **asleep** with nothing open, **calm** when all is quiet, **working** while output streams, and visibly **agitated** the moment a pane starts waiting on you. Click it to jump straight to whichever pane that is.
 - Five themes — Midnight, Grove, Ember, Bubblegum and Paper (light) — each covering the chrome *and* the terminal palette, so switching never leaves the two halves mismatched.
-- **Critters.** Every terminal gets an animal and a hue. Six tabs in the same folder all read `Owner`; one of them is the otter. It is the difference between counting tabs and recognising them.
+- **Critters, in five packs.** Forest, Robots, Ocean, Space or Garden. Every card gets a character and a hue, so cards from the same folder stay tellable apart — the difference between counting tiles and recognising them.
 
 **Terminals**
 - 1–16 panes, switchable between **tabs** and **grid** at any time (`Ctrl+Shift+G`)

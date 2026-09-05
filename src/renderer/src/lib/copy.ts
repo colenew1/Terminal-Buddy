@@ -17,11 +17,11 @@ export function greeting(d = new Date()): string {
 
 /** Describes the current fleet in one line. Used by the buddy's tooltip. */
 export function fleetStatus(total: number, busy: number, waiting: number): string {
-  if (total === 0) return 'No terminals yet — I am just vibing'
+  if (total === 0) return 'Nothing on the go — I am just vibing'
   const bits: string[] = []
   if (busy) bits.push(`${busy} working`)
   if (waiting) bits.push(`${waiting} waiting on you`)
-  if (bits.length === 0) return `${total} terminal${total === 1 ? '' : 's'}, all quiet`
+  if (bits.length === 0) return `${total} card${total === 1 ? '' : 's'}, all quiet`
   return bits.join(' · ')
 }
 

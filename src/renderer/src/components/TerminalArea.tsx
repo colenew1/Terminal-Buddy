@@ -7,6 +7,7 @@ import { randomTip } from '../lib/copy'
 import { canDrop, getDragItem, type DragItem } from '../lib/dnd'
 import { resumeCommandFor, skillLaunchCommand } from '../lib/commands'
 import Buddy from './Buddy'
+import AgentView from './AgentView'
 
 /** Roughly square, biased to wider rows — terminals want columns more than lines. */
 function baseColumns(n: number): number {
@@ -37,12 +38,16 @@ export default function TerminalArea(): React.JSX.Element {
   const layout = useStore((s) => s.layout)
   const locked = useStore((s) => s.locked)
   const agents = useStore((s) => s.agents)
+  const rawPanes = useStore((s) => s.rawPanes)
+  const devMode = useStore((s) => s.settings.devMode)
+  const toggleRaw = useStore((s) => s.toggleRaw)
   const reduceMotion = useStore((s) => s.settings.reduceMotion)
   const setActive = useStore((s) => s.setActive)
   const closeSession = useStore((s) => s.closeSession)
   const openSession = useStore((s) => s.openSession)
 
   const areaRef = useRef<HTMLDivElement>(null)
+  const [compact, setCompact] = useState<Record<string, boolean>>({})
   const [dragId, setDragId] = useState<string | null>(null)
   const dragIdRef = useRef<string | null>(null)
   const [itemDrag, setItemDrag] = useState<DragItem | null>(null)
@@ -115,6 +120,35 @@ export default function TerminalArea(): React.JSX.Element {
     const live = new Set([...cells].map((c) => c.dataset.sessionId))
     for (const id of lastRects.current.keys()) if (!live.has(id)) lastRects.current.delete(id)
   })
+
+  /*
+   * Below a certain size a conversation is illegible, so the tile collapses to
+   * just its name. Measured rather than derived from the span, because the grid
+   * and the window both change the answer.
+   */
+  useEffect(() => {
+    const area = areaRef.current
+    if (!area) return
+    const ro = new ResizeObserver((entries) => {
+      setCompact((prev) => {
+        const next = { ...prev }
+        let changed = false
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.sessionId
+          if (!id) continue
+          const r = entry.contentRect
+          const small = r.width < 260 || r.height < 170
+          if (next[id] !== small) {
+            next[id] = small
+            changed = true
+          }
+        }
+        return changed ? next : prev
+      })
+    })
+    for (const cell of area.querySelectorAll<HTMLElement>('.cell')) ro.observe(cell)
+    return () => ro.disconnect()
+  }, [sessions.length, layout])
 
   const cellAt = (x: number, y: number): string | null =>
     document.elementFromPoint(x, y)?.closest<HTMLElement>('.cell')?.dataset.sessionId ?? null
@@ -293,6 +327,16 @@ export default function TerminalArea(): React.JSX.Element {
                 <span className="cell-path">{shortPath(s.cwd, 2)}</span>
                 {s.attention && <span className="dot attention" title="Waiting on you" />}
                 <button
+                  className={`icon-btn tiny ${rawPanes[s.id] ? 'is-on' : ''}`}
+                  title={rawPanes[s.id] ? 'Back to the conversation' : 'Show the raw terminal'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleRaw(s.id)
+                  }}
+                >
+                  {'</>'}
+                </button>
+                <button
                   className="icon-btn tiny"
                   title="Close terminal"
                   onClick={(e) => {
@@ -305,7 +349,17 @@ export default function TerminalArea(): React.JSX.Element {
               </div>
             )}
 
-            <TerminalPane session={s} visible={visible} />
+            {/*
+              The terminal stays mounted underneath so its scrollback and sizing
+              survive; the conversation simply covers it. Dev mode lifts the lid.
+              Both live in a body box so neither hides the card header.
+            */}
+            <div className="cell-body">
+              <TerminalPane session={s} visible={visible} />
+              {visible && !(devMode || rawPanes[s.id]) && (
+                <AgentView session={s} compact={!!compact[s.id]} />
+              )}
+            </div>
 
             {/* While unlocked, a shield keeps xterm from claiming the pointer. */}
             {!locked && visible && (

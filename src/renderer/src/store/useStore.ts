@@ -6,10 +6,11 @@ import {
   type ScanProgress,
   type SessionSpec,
   type Settings,
+  type FeedEvent,
   type ShellDef,
   type Span
 } from '@shared/types'
-import { pickCritter, CRITTERS, type Critter } from '../lib/critters'
+import { pickCritter, findCritter, type Critter } from '../lib/critters'
 import { applyTheme } from '../lib/themes'
 
 export interface Session {
@@ -51,6 +52,10 @@ interface State {
   locked: boolean
   /** Which panes are running an agent right now, refreshed on demand. */
   agents: Record<string, 'claude' | 'codex' | null>
+  /** Live conversation per pane, tailed from the agent's own transcript. */
+  feeds: Record<string, FeedEvent[]>
+  /** Panes showing the raw terminal rather than the conversation. */
+  rawPanes: Record<string, boolean>
 
   catalog: Catalog | null
   catalogLoading: boolean
@@ -72,6 +77,9 @@ interface Actions {
   moveSession: (from: number, to: number) => void
   setSpan: (id: string, span: Span) => void
   refreshAgents: () => Promise<void>
+  addFeedEvents: (id: string, events: FeedEvent[]) => void
+  toggleRaw: (id: string) => void
+  send: (id: string, text: string) => void
   setLayout: (m: LayoutMode) => void
   markData: (id: string) => void
   markExit: (id: string, code: number) => void
@@ -109,6 +117,8 @@ export const useStore = create<State & Actions>((set, get) => ({
   // Always starts locked: a stray drag mid-session should never rearrange work.
   locked: true,
   agents: {},
+  feeds: {},
+  rawPanes: {},
 
   catalog: null,
   catalogLoading: false,
@@ -165,8 +175,8 @@ export const useStore = create<State & Actions>((set, get) => ({
         ...spec,
         shellId: spec.shellId ?? settings.defaultShellId
       })
-      const saved = spec.critter ? CRITTERS.find((c) => c.name === spec.critter) : undefined
-      const critter = saved ?? pickCritter(sessions.map((x) => x.critter.name))
+      const saved = spec.critter ? findCritter(spec.critter) : undefined
+      const critter = saved ?? pickCritter(settings.critterPack, sessions.map((x) => x.critter.name))
       const session: Session = {
         ...info,
         critter,
@@ -178,6 +188,7 @@ export const useStore = create<State & Actions>((set, get) => ({
         unseen: false
       }
       set((s) => ({ sessions: [...s.sessions, session], activeId: info.id }))
+      window.buddy.feed.attach(info.id, info.cwd)
       get().persist()
       return info.id
     } catch (e) {
@@ -188,6 +199,7 @@ export const useStore = create<State & Actions>((set, get) => ({
 
   closeSession(id) {
     window.buddy.pty.kill(id)
+    window.buddy.feed.detach(id)
     set((s) => {
       const idx = s.sessions.findIndex((x) => x.id === id)
       const sessions = s.sessions.filter((x) => x.id !== id)
@@ -255,6 +267,26 @@ export const useStore = create<State & Actions>((set, get) => ({
       sessions: s.sessions.map((x) => (x.id === id ? { ...x, span: { cols, rows } } : x))
     }))
     get().persist()
+  },
+
+  addFeedEvents(id, events) {
+    if (!events.length) return
+    set((s) => {
+      const prev = s.feeds[id] ?? []
+      // Keep the tail bounded; a long agent run can produce thousands of rows.
+      const next = [...prev, ...events].slice(-500)
+      return { feeds: { ...s.feeds, [id]: next } }
+    })
+  },
+
+  toggleRaw(id) {
+    set((s) => ({ rawPanes: { ...s.rawPanes, [id]: !s.rawPanes[id] } }))
+  },
+
+  /** Type a line into a pane's shell or agent, as if you had typed it. */
+  send(id, text) {
+    if (!text.trim()) return
+    window.buddy.pty.write(id, text + '\r')
   },
 
   async refreshAgents() {
