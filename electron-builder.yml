@@ -16,6 +16,11 @@ files:
 asarUnpack:
   - '**/node_modules/@lydell/node-pty*/**'
 
+# The tray icon is read from disk at runtime, so it cannot live in the asar.
+extraResources:
+  - from: resources
+    to: resources
+
 win:
   target:
     - target: nsis

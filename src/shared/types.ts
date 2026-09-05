@@ -131,6 +131,12 @@ export interface Settings {
   chime: boolean
   /** Stills every animation, including the buddy. */
   reduceMotion: boolean
+  /** Keep an icon in the Windows notification area. */
+  trayIcon: boolean
+  /** Minimising hides to the tray instead of the taskbar. */
+  minimizeToTray: boolean
+  /** Closing the window hides it instead of killing every terminal. */
+  closeToTray: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -150,7 +156,10 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'midnight',
   critters: true,
   chime: false,
-  reduceMotion: false
+  reduceMotion: false,
+  trayIcon: true,
+  minimizeToTray: false,
+  closeToTray: false
 }
 
 export interface PersistedSession {

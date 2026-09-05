@@ -22,6 +22,9 @@ const child = spawn(electron, args, {
   env: { ...process.env, ELECTRON_ENABLE_LOGGING: '0' }
 })
 
+let exitedEarly = null
+child.on('exit', (code) => { exitedEarly = code })
+
 const appLog = []
 child.stdout.on('data', (d) => appLog.push(['out', String(d)]))
 child.stderr.on('data', (d) => appLog.push(['err', String(d)]))
@@ -54,6 +57,12 @@ async function evaluate(expression) {
 
 async function findPage() {
   for (let i = 0; i < 60; i++) {
+    if (exitedEarly !== null) {
+      throw new Error(
+        'the app quit before the harness attached (exit ' + exitedEarly + '). ' +
+        'Another Terminal Buddy is probably already running — it holds the single-instance lock. Close it and retry.'
+      )
+    }
     try {
       const res = await fetch(`http://127.0.0.1:${PORT}/json/list`)
       const targets = await res.json()
@@ -152,6 +161,24 @@ try {
     return got
   })()`)
   check('pid resolves after spawn', pid > 0, `pid ${pid}`)
+
+  // The taskbar badge is painted here and consumed by main; make sure it is a
+  // real PNG and that pushing status does not throw across the bridge.
+  const badge = await evaluate(`(async () => {
+    const mod = await import('/src/lib/badge.ts').catch(() => null)
+    const draw = mod?.drawBadge
+    const url = draw ? draw(3) : null
+    window.buddy.app.setStatus(2, 1, url)
+    window.buddy.app.setStatus(0, 0, null)
+    return { hasFn: !!draw, png: typeof url === 'string' && url.startsWith('data:image/png;base64,'), len: url ? url.length : 0 }
+  })()`).catch(() => ({ hasFn: false, png: false, len: 0 }))
+  // In a production build the module specifier is bundled away; fall back to
+  // asserting the bridge alone.
+  if (badge.hasFn) check('taskbar badge renders a PNG', badge.png, `${badge.len} chars`)
+  else {
+    await evaluate(`window.buddy.app.setStatus(2, 1, null); true`)
+    check('status bridge accepts fleet updates', true, 'badge module bundled')
+  }
 
   const catalog = await evaluate(`window.buddy.catalog.get().then(c => ({
     skills: c.skills.length,

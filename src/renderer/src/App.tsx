@@ -9,6 +9,7 @@ import { matchShortcut } from './lib/shortcuts'
 import { get as getTerm, writeTo } from './lib/terminals'
 import { greeting } from './lib/copy'
 import { chime } from './lib/chime'
+import { drawBadge } from './lib/badge'
 import Buddy from './components/Buddy'
 
 export default function App(): React.JSX.Element {
@@ -20,6 +21,7 @@ export default function App(): React.JSX.Element {
   const toast = useStore((s) => s.toast)
   const settings = useStore((s) => s.settings)
   const waiting = useStore((s) => s.sessions.filter((x) => x.attention).length)
+  const total = useStore((s) => s.sessions.length)
   const prevWaiting = useRef(0)
 
   const [searchOpen, setSearchOpen] = useState(false)
@@ -45,12 +47,18 @@ export default function App(): React.JSX.Element {
     const offFolder = window.buddy.app.onOpenFolder((dir) => {
       void useStore.getState().openSession({ cwd: dir })
     })
+    const offNew = window.buddy.app.onNewTerminal(() => {
+      const s = useStore.getState()
+      const active = s.sessions.find((x) => x.id === s.activeId)
+      void window.buddy.app.paths().then((p) => s.openSession({ cwd: active?.cwd ?? p.home }))
+    })
     return () => {
       offData()
       offExit()
       offInfo()
       offProgress()
       offFolder()
+      offNew()
     }
   }, [])
 
@@ -58,6 +66,12 @@ export default function App(): React.JSX.Element {
     if (settings.chime && waiting > prevWaiting.current) chime()
     prevWaiting.current = waiting
   }, [waiting, settings.chime])
+
+  // The tray tooltip and the taskbar overlay badge both live in main, but the
+  // fleet state and the theme colours live here.
+  useEffect(() => {
+    window.buddy.app.setStatus(total, waiting, drawBadge(waiting))
+  }, [total, waiting, settings.theme])
 
   // Drives the "went quiet, probably waiting on you" badge.
   useEffect(() => {

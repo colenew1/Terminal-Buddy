@@ -37,6 +37,13 @@ It is a personal tool, published in case it's useful. There is no telemetry, no 
 - **Skills** — every `SKILL.md` from your Claude plugins, user folder and per-project `.claude/skills`, plus Codex prompts. Deduplicated across cached plugin versions.
 - **Projects** — every folder you've worked in, derived from your session history. One click opens a terminal there.
 
+**Living on your desktop**
+- Installs to the Start menu and desktop like any app — search "Terminal Buddy", or right-click the taskbar icon and **Pin to taskbar**
+- A **notification-area icon** with the fleet status in its tooltip, a menu for a new terminal or a recent project, and Quit
+- A **count over the taskbar icon** whenever terminals are waiting on you, and a single taskbar flash when one starts
+- **Jump list** — right-click the taskbar or Start icon for your recent projects
+- Optional **minimise to tray** and **close to tray**, so closing the window doesn't kill eight running agents
+
 **Shell integration**
 - **Open in Buddy** on any folder in Explorer
 - A `buddy` command for your PATH — `buddy` opens the current folder, `buddy <path>` opens that one
@@ -52,6 +59,8 @@ All of it is in **Settings → Look and feel**, and none of it is load-bearing:
 | **Critters** | Off, and tabs go back to plain numbers. |
 | **Chime** | Two soft synthesised notes when a pane starts waiting. **Off by default** — a notification you did not ask for is worse than none. |
 | **Calm mode** | Stills every animation, buddy included. |
+
+And under **Settings → Taskbar and tray**: the notification-area icon, minimise-to-tray and close-to-tray, all off-switchable.
 
 `prefers-reduced-motion` is honoured whether or not Calm mode is on. The tone lives in one file, `src/renderer/src/lib/copy.ts`, so it can be flattened in a single edit — and the rule it follows is that the chrome can have a personality while the data never does: counts, paths, ids and errors are always literal.
 
@@ -69,7 +78,11 @@ npm run dist         # build installer + portable into release/
 
 Requires Node 18+. **No C++ toolchain needed** — the PTY layer ships prebuilt binaries.
 
+The installer is per-user, needs no admin rights, and adds Start menu and desktop shortcuts. To get it onto the taskbar, launch it once, then right-click its taskbar button → **Pin to taskbar**. (Windows deliberately blocks apps from pinning themselves.)
+
 After first launch, open **Settings (`Ctrl+,`) → Windows integration** and install the context menu and the `buddy` command.
+
+> Install those from the *installed* copy, not a dev build or the unpacked folder — the registry entry stores an absolute path, so it breaks if that folder moves. Re-run them after any move.
 
 > **Windows 11 note:** the context menu entry appears under **“Show more options”** (or `Shift+F10`), not the short default menu. Putting an entry in the top-level Win11 menu requires shipping a signed MSIX package with a COM handler, which is more machinery than this tool warrants.
 
@@ -132,10 +145,13 @@ main process                      renderer
 └─ WindowManager   single-instance lock, argv → new tab
 ```
 
-Two details worth knowing if you fork this:
+Windows shell surfaces — tray, taskbar badge, jump list — live in `src/main/tray.ts`. The badge itself is painted in the renderer (that is where a canvas and the live theme colours are) and handed to main as a data URL.
+
+Three details worth knowing if you fork this:
 
 - **Hidden panes keep their full size.** In tab mode every pane is absolutely positioned at full size and only `visibility` changes. A `display:none` terminal measures as zero, so `fit()` would resize the pty to nonsense on every tab switch.
 - **The pid arrives late.** On Windows, ConPTY populates `pty.pid` asynchronously; reading it at spawn always returns `0`. The manager refreshes it when the first output lands and pushes the correction to the UI.
+- **`AppUserModelId` must match the installer's `appId`.** Without it Windows treats a pinned shortcut and the running window as two different apps, and the taskbar shows both.
 
 ## Limitations
 
@@ -160,10 +176,12 @@ The tests drive the **real application**, not mocks — 29 assertions across thr
 | `npm run test:grid` | Opens 6 terminals, tiles them, checks every pane has real geometry and a unique critter, and waits for the attention badges — and the buddy's mood — to react. |
 | `npm run test:registry` | Round-trips the generated `.reg` through the real `reg.exe` under a scratch key (paths with spaces and all), then deletes it. |
 
-Set `BUDDY_EXE` to point the harness at a packaged build instead of `out/`:
+Only one Terminal Buddy can run at a time (single-instance lock), so **close the app before running the tests** — otherwise the harness quits instantly. It will tell you if that happens.
+
+Set `BUDDY_EXE` to point the harness at a packaged or installed build instead of `out/`:
 
 ```bash
-BUDDY_EXE="release/win-unpacked/Terminal Buddy.exe" npm run test:smoke
+BUDDY_EXE="$LOCALAPPDATA/Programs/Terminal Buddy/Terminal Buddy.exe" npm run test:smoke
 ```
 
 Regenerate the icon with `npm run icon` (pure Python, no image libraries needed).

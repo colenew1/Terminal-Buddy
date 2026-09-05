@@ -15,6 +15,7 @@ import { detectShells } from './shells'
 import { PtyManager } from './pty'
 import { CatalogService, buildMarkdown } from './catalog'
 import { loadSettings, saveSettings, loadWorkspace, saveWorkspace, cacheFile } from './store'
+import { TrayController, setTaskbarBadge, setJumpList } from './tray'
 import {
   installCli,
   installContextMenu,
@@ -28,6 +29,9 @@ const ptys = new PtyManager(shells)
 
 let win: BrowserWindow | null = null
 let catalog: CatalogService | null = null
+let tray: TrayController | null = null
+/** Distinguishes "user closed the window" from "app is really quitting". */
+let quitting = false
 /** Folders requested before the renderer was ready to receive them. */
 const pendingFolders: string[] = []
 
@@ -57,6 +61,16 @@ function folderFromArgv(argv: string[]): string | null {
 
 function sendToRenderer(channel: string, ...args: unknown[]): void {
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args)
+}
+
+function revealWindow(): void {
+  if (!win || win.isDestroyed()) {
+    createWindow()
+    return
+  }
+  if (!win.isVisible()) win.show()
+  if (win.isMinimized()) win.restore()
+  win.focus()
 }
 
 function openFolder(dir: string): void {
@@ -123,6 +137,21 @@ function createWindow(): void {
   win.on('maximize', saveBounds)
   win.on('unmaximize', saveBounds)
 
+  // With a tray icon present, closing can mean "get out of the way" rather
+  // than "kill eight running agents".
+  win.on('close', (e) => {
+    if (quitting) return
+    if (loadSettings().closeToTray && loadSettings().trayIcon) {
+      e.preventDefault()
+      win?.hide()
+    }
+  })
+
+  win.on('minimize', () => {
+    const s = loadSettings()
+    if (s.minimizeToTray && s.trayIcon) win?.hide()
+  })
+
   win.on('closed', () => {
     win = null
     ptys.setTarget(null)
@@ -152,6 +181,7 @@ function registerIpc(): void {
   ipcMain.handle('settings:get', () => loadSettings())
   ipcMain.handle('settings:set', (_e, s: Settings) => {
     saveSettings(s)
+    tray?.enable(s.trayIcon)
     return s
   })
 
@@ -162,11 +192,17 @@ function registerIpc(): void {
     saveWorkspace({ ...w, bounds: cur.bounds })
   })
 
+  const withJumpList = async (c: Promise<Catalog>): Promise<Catalog> => {
+    const result = await c
+    setJumpList(recentProjects())
+    return result
+  }
+
   ipcMain.handle('catalog:get', async (): Promise<Catalog> => {
     if (catalog?.cached) return catalog.cached
-    return catalog!.scan(projectRoots())
+    return withJumpList(catalog!.scan(projectRoots()))
   })
-  ipcMain.handle('catalog:refresh', async (): Promise<Catalog> => catalog!.scan(projectRoots()))
+  ipcMain.handle('catalog:refresh', async (): Promise<Catalog> => withJumpList(catalog!.scan(projectRoots())))
 
   ipcMain.handle('catalog:transcript', async (_e, entry: ChatEntry) => {
     const { turns, truncated } = await catalog!.transcript(entry.path, entry.agent)
@@ -214,6 +250,19 @@ function registerIpc(): void {
     platform: process.platform
   }))
 
+  ipcMain.on(
+    'app:status',
+    (_e, total: number, waiting: number, badge: string | null) => {
+      tray?.setStatus(total, waiting)
+      setTaskbarBadge(win, badge, waiting)
+      // Bounce the taskbar button once when something starts waiting.
+      if (waiting > 0 && win && !win.isFocused()) win.flashFrame(true)
+      else win?.flashFrame(false)
+    }
+  )
+
+  ipcMain.on('app:show', () => revealWindow())
+
   ipcMain.on('app:openExternal', (_e, url: string) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(() => undefined)
   })
@@ -221,6 +270,14 @@ function registerIpc(): void {
   ipcMain.on('app:openPath', (_e, p: string) => {
     shell.openPath(p).catch(() => undefined)
   })
+}
+
+/** Most recently used project folders that still exist on disk. */
+function recentProjects(): { name: string; path: string }[] {
+  return (catalog?.cached?.projects ?? [])
+    .filter((p) => p.exists)
+    .slice(0, 8)
+    .map((p) => ({ name: p.name, path: p.path }))
 }
 
 /** Folders worth checking for project-level `.claude/skills`. */
@@ -249,8 +306,35 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     nativeTheme.themeSource = 'dark'
+    // Must match electron-builder's appId, or Windows treats a pinned
+    // shortcut and the running window as two different apps.
+    app.setAppUserModelId('com.terminalbuddy.app')
+
     registerIpc()
     createWindow()
+
+    tray = new TrayController(() => win, {
+      onShow: () => revealWindow(),
+      onNewTerminal: () => {
+        revealWindow()
+        sendToRenderer('app:new-terminal')
+      },
+      onOpenFolder: async () => {
+        revealWindow()
+        const res = await dialog.showOpenDialog({ properties: ['openDirectory'] })
+        if (!res.canceled && res.filePaths[0]) openFolder(res.filePaths[0])
+      },
+      onQuit: () => {
+        quitting = true
+        app.quit()
+      },
+      recentProjects,
+      openProject: (p) => {
+        revealWindow()
+        openFolder(p)
+      }
+    })
+    tray.enable(loadSettings().trayIcon)
 
     const initial = folderFromArgv(process.argv)
     if (initial) pendingFolders.push(initial)
@@ -265,5 +349,9 @@ if (!gotLock) {
     if (process.platform !== 'darwin') app.quit()
   })
 
-  app.on('before-quit', () => ptys.killAll())
+  app.on('before-quit', () => {
+    quitting = true
+    tray?.dispose()
+    ptys.killAll()
+  })
 }

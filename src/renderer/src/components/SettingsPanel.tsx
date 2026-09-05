@@ -226,6 +226,52 @@ export default function SettingsPanel(): React.JSX.Element {
           </section>
 
           <section>
+            <h4>Taskbar and tray</h4>
+            <label className="field">
+              <span>
+                Notification area icon
+                <small>Keeps Terminal Buddy reachable while the window is closed.</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.trayIcon}
+                onChange={(e) => void setSettings({ trayIcon: e.target.checked })}
+              />
+            </label>
+            <label className="field">
+              <span>
+                Minimise to tray
+                <small>Minimising hides the window instead of parking it on the taskbar.</small>
+              </span>
+              <input
+                type="checkbox"
+                disabled={!settings.trayIcon}
+                checked={settings.minimizeToTray}
+                onChange={(e) => void setSettings({ minimizeToTray: e.target.checked })}
+              />
+            </label>
+            <label className="field">
+              <span>
+                Close to tray
+                <small>
+                  Closing the window hides it rather than killing every running terminal. Quit from the tray
+                  menu.
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                disabled={!settings.trayIcon}
+                checked={settings.closeToTray}
+                onChange={(e) => void setSettings({ closeToTray: e.target.checked })}
+              />
+            </label>
+            <p className="muted tiny">
+              A count appears over the taskbar icon whenever terminals are waiting on you, and right-clicking
+              it lists your recent projects.
+            </p>
+          </section>
+
+          <section>
             <h4>Windows integration</h4>
             {status && !status.packaged && (
               <p className="muted warn">

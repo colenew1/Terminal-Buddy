@@ -72,6 +72,11 @@ const api = {
       platform: string
     }> => ipcRenderer.invoke('app:paths'),
     openExternal: (url: string): void => ipcRenderer.send('app:openExternal', url),
+    /** Fleet state for the tray tooltip and the taskbar overlay badge. */
+    setStatus: (total: number, waiting: number, badge: string | null): void =>
+      ipcRenderer.send('app:status', total, waiting, badge),
+    show: (): void => ipcRenderer.send('app:show'),
+    onNewTerminal: (cb: () => void): Unsub => on('app:new-terminal', cb),
     revealPath: (p: string): void => ipcRenderer.send('app:revealPath', p),
     openPath: (p: string): void => ipcRenderer.send('app:openPath', p),
     onOpenFolder: (cb: (dir: string) => void): Unsub => on('app:open-folder', cb)

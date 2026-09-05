@@ -12,6 +12,9 @@ const bin = exe ?? (process.platform === 'win32' ? 'node_modules/electron/dist/e
 const args = exe ? [`--remote-debugging-port=${PORT}`] : ['./out/main/index.js', `--remote-debugging-port=${PORT}`]
 const child = spawn(bin, args, { stdio: 'ignore' })
 
+let exitedEarly = null
+child.on('exit', (code) => { exitedEarly = code })
+
 let ws
 let nextId = 1
 const pending = new Map()
@@ -40,6 +43,12 @@ async function ev(expression) {
 try {
   let page
   for (let i = 0; i < 60; i++) {
+    if (exitedEarly !== null) {
+      throw new Error(
+        'the app quit before the harness attached (exit ' + exitedEarly + '). ' +
+        'Another Terminal Buddy is probably already running — it holds the single-instance lock. Close it and retry.'
+      )
+    }
     try {
       const t = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()
       page = t.find((x) => x.type === 'page' && x.webSocketDebuggerUrl)

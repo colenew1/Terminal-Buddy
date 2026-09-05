@@ -72,23 +72,36 @@ def chunk(tag, data):
     )
 
 
-def main():
+def render(size):
+    """Rasterise the mark at an arbitrary size by scaling the sample grid."""
+    scale = SIZE / float(size)
     raw = bytearray()
-    for y in range(SIZE):
+    for y in range(size):
         raw.append(0)  # filter type: none
-        for x in range(SIZE):
-            raw.extend(pixel(x + 0.5, y + 0.5))
+        for x in range(size):
+            raw.extend(pixel((x + 0.5) * scale, (y + 0.5) * scale))
 
     png = b'\x89PNG\r\n\x1a\n'
-    png += chunk(b'IHDR', struct.pack('>IIBBBBB', SIZE, SIZE, 8, 6, 0, 0, 0))
+    png += chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 6, 0, 0, 0))
     png += chunk(b'IDAT', zlib.compress(bytes(raw), 9))
     png += chunk(b'IEND', b'')
+    return png
 
-    os.makedirs('build', exist_ok=True)
-    out = os.path.join('build', 'icon.png')
-    with open(out, 'wb') as f:
-        f.write(png)
-    print('wrote %s (%d bytes)' % (out, len(png)))
+
+def write(path, data):
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(path, 'wb') as f:
+        f.write(data)
+    print('wrote %s (%d bytes)' % (path, len(data)))
+
+
+def main():
+    write(os.path.join('build', 'icon.png'), render(SIZE))
+    # The tray draws at 16pt but wants a 32px asset for high-DPI displays.
+    write(os.path.join('resources', 'tray.png'), render(32))
+    write(os.path.join('resources', 'tray@2x.png'), render(64))
 
 
 if __name__ == '__main__':
