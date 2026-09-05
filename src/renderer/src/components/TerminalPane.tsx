@@ -9,6 +9,7 @@ import { useStore, type Session } from '../store/useStore'
 import { fitOne, register, unregister, get as getTerm } from '../lib/terminals'
 import { matchShortcut, matchClipboard } from '../lib/shortcuts'
 import { themeById } from '../lib/themes'
+import { arrowsFor, computeClickDelta } from '../lib/cursor'
 
 
 
@@ -87,6 +88,32 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
 
     term.element?.addEventListener('focusin', () => setActive(id))
 
+    // Click anywhere in the line you are typing and the cursor goes there.
+    // See lib/cursor.ts for why this is arrow keys under the hood.
+    const onMouseUp = (e: MouseEvent): void => {
+      if (e.button !== 0 || e.shiftKey) return
+      const st = useStore.getState()
+      if (!st.locked) return
+      if (!st.settings.clickToPosition && !e.altKey) return
+      // A click on an unfocused pane just focuses it; the next one positions.
+      if (st.activeId !== id) return
+
+      const screenEl = host.querySelector<HTMLElement>('.xterm-screen')
+      if (!screenEl) return
+      const point = { clientX: e.clientX, clientY: e.clientY }
+
+      // Let xterm settle its selection first — a drag is a selection, not a
+      // reposition, and hasSelection() is only accurate after this tick.
+      setTimeout(() => {
+        if (term.hasSelection()) return
+        const delta = computeClickDelta(term, screenEl, point)
+        if (delta === null) return
+        const seq = arrowsFor(term, delta)
+        if (seq) window.buddy.pty.write(id, seq)
+      }, 0)
+    }
+    term.element?.addEventListener('mouseup', onMouseUp)
+
     const initialFit = (): void => {
       fitOne(id)
       term.focus()
@@ -97,6 +124,7 @@ export default function TerminalPane({ session, visible }: Props): React.JSX.Ele
 
     return () => {
       clearTimeout(settle)
+      term.element?.removeEventListener('mouseup', onMouseUp)
       unregister(id)
     }
   }, [id, setActive])

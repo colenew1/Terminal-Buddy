@@ -131,6 +131,8 @@ export interface Settings {
   chime: boolean
   /** Stills every animation, including the buddy. */
   reduceMotion: boolean
+  /** Click in the command line to put the cursor there, instead of arrowing over. */
+  clickToPosition: boolean
   /** Keep an icon in the Windows notification area. */
   trayIcon: boolean
   /** Minimising hides to the tray instead of the taskbar. */
@@ -157,6 +159,7 @@ export const DEFAULT_SETTINGS: Settings = {
   critters: true,
   chime: false,
   reduceMotion: false,
+  clickToPosition: true,
   trayIcon: true,
   minimizeToTray: false,
   closeToTray: false

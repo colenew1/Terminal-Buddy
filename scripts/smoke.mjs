@@ -87,6 +87,18 @@ async function chord(modifiers, key, code, keyCode) {
   }
 }
 
+
+async function typeText(text) {
+  for (const ch of text) {
+    await send('Input.dispatchKeyEvent', { type: 'char', text: ch, key: ch })
+  }
+}
+
+const strip = (t) =>
+  String(t)
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b[[\]()#;?]*[0-9;]*[A-Za-z]/g, '')
+
 const results = []
 function check(name, ok, detail = '') {
   results.push({ name, ok, detail })
@@ -209,6 +221,51 @@ try {
   const echoed = await evaluate(`(() => { window.__off && window.__off(); return window.__acc })()`)
   check('Ctrl+V pastes into the terminal', String(echoed).includes('PASTE_PROBE_42'),
     pasted ? JSON.stringify(String(echoed).slice(-40)) : 'no terminal textarea')
+
+  // Click-to-position: type a line, click five cells back, insert a marker and
+  // confirm it landed mid-string rather than at the end. `#` keeps PowerShell
+  // from actually running anything.
+  const clickEdit = await evaluate(`(async () => {
+    window.__acc2 = ''
+    window.__off2 = window.buddy.pty.onData((id, d) => { window.__acc2 += d })
+    const ta = document.querySelector('.xterm-helper-textarea')
+    if (ta) ta.focus()
+    return !!ta
+  })()`)
+  await sleep(300)
+  // Escape clears whatever the paste test left on the line.
+  await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 })
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 })
+  await sleep(400)
+  await typeText('# abcdefghij')
+  await sleep(1200)
+
+  // xterm parks its hidden textarea on the cursor cell, so it doubles as a
+  // read-out of where the caret is and how wide one cell is.
+  const caret = await evaluate(`(() => {
+    const ta = document.querySelector('.xterm-helper-textarea')
+    if (!ta) return null
+    const r = ta.getBoundingClientRect()
+    return { x: r.left, y: r.top + r.height / 2, w: ta.offsetWidth || r.width }
+  })()`)
+
+  if (caret && caret.w > 0) {
+    const targetX = Math.round(caret.x - 5 * caret.w + caret.w / 2)
+    const targetY = Math.round(caret.y)
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await send('Input.dispatchMouseEvent', { type, x: targetX, y: targetY, button: 'left', clickCount: 1, pointerType: 'mouse' })
+    }
+    await sleep(700)
+    await typeText('Q')
+    await sleep(700)
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 })
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 })
+    await sleep(1500)
+  }
+
+  const edited = strip(await evaluate(`(() => { window.__off2 && window.__off2(); return window.__acc2 })()`))
+  check('clicking mid-line moves the cursor there', edited.includes('abcdeQfghij'),
+    caret ? JSON.stringify(edited.replace(/\s+/g, ' ').slice(-70)) : 'no caret')
 
   const catalog = await evaluate(`window.buddy.catalog.get().then(c => ({
     skills: c.skills.length,

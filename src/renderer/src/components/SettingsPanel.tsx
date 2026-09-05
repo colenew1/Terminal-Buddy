@@ -119,6 +119,21 @@ export default function SettingsPanel(): React.JSX.Element {
 
             <label className="field">
               <span>
+                Click to move the cursor
+                <small>
+                  Click anywhere in the line you are typing instead of arrowing over. Alt+click always works,
+                  even with this off.
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.clickToPosition}
+                onChange={(e) => void setSettings({ clickToPosition: e.target.checked })}
+              />
+            </label>
+
+            <label className="field">
+              <span>
                 Attention delay (ms)
                 <small>How long a pane must be quiet after output before it is flagged.</small>
               </span>

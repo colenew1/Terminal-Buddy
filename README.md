@@ -29,6 +29,7 @@ It is a personal tool, published in case it's useful. There is no telemetry, no 
 - Auto-detects PowerShell 7, Windows PowerShell, Command Prompt, Git Bash and WSL
 - **Attention badges** — a pane that produced output and then went quiet gets flagged, so you can see at a glance which agent is waiting on you
 - **Broadcast mode** — type once, send to every terminal (`Ctrl+Shift+B`)
+- **Click to move the cursor** — click any word in the line you're typing and the caret goes there. No arrow-key crawling.
 - **Rearrange the grid** — hit the padlock (`Ctrl+Shift+L`) and drag panes onto each other to swap them. Tabs reorder by dragging at any time.
 - Rename tabs (double-click), search scrollback (`Ctrl+Shift+F`), reopen your layout on launch
 - GPU-accelerated rendering, 5000 lines of scrollback per pane by default
@@ -105,6 +106,7 @@ After first launch, open **Settings (`Ctrl+,`) → Windows integration** and ins
 | `Ctrl+C` / `Ctrl+V` | Copy / paste |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste (also works) |
 | Right-click | Copy selection, or paste if nothing selected |
+| Click / Alt+click | Move the cursor into the line you're typing |
 | `Ctrl+,` | Settings |
 
 `Ctrl+C` copies **only when text is selected**; with nothing selected it stays an interrupt, and copying clears the selection so the next press interrupts. Every other bare `Ctrl` combo is left to your shell — `Ctrl+A` still goes to the start of the line, `Ctrl+W` still deletes a word.
@@ -161,6 +163,20 @@ Three details worth knowing if you fork this:
 - **Hidden panes keep their full size.** In tab mode every pane is absolutely positioned at full size and only `visibility` changes. A `display:none` terminal measures as zero, so `fit()` would resize the pty to nonsense on every tab switch.
 - **The pid arrives late.** On Windows, ConPTY populates `pty.pid` asynchronously; reading it at spawn always returns `0`. The manager refreshes it when the first output lands and pushes the correction to the UI.
 - **`AppUserModelId` must match the installer's `appId`.** Without it Windows treats a pinned shortcut and the running window as two different apps, and the taskbar shows both.
+
+## Editing the line you're typing
+
+Click anywhere in the current command and the cursor moves there — click the third word, fix it, carry on. Alt+click does the same thing and keeps working even if you switch the feature off in **Settings → Terminal**.
+
+Worth knowing how it works, because it explains the edges. A terminal cannot move the shell's cursor directly: the line buffer belongs to the line editor (PSReadLine, readline), not to the terminal. So Buddy measures the distance from the caret to your click and sends exactly that many arrow keys in one burst. iTerm2, VS Code and Windows Terminal all use the same trick. The editor clamps at both ends of its buffer, so clicking into the prompt or past the last character is harmless.
+
+It deliberately does nothing in three cases:
+
+- **Full-screen programs** (vim, less, htop). They own the whole grid and the cursor isn't a text caret, so arrows would be navigation — or worse.
+- **When the program asked for mouse events.** The click belongs to it.
+- **When the click would need Up or Down.** Those mean *history* to every shell worth using; sending them would silently replace the line you were editing. Clicks within one wrapped line still work, because horizontal arrows walk over the wrap on their own.
+
+A click on an unfocused pane only focuses it. The next click positions.
 
 ## Rearranging panes
 
