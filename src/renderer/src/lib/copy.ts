@@ -19,8 +19,8 @@ export function greeting(d = new Date()): string {
 export function fleetStatus(total: number, busy: number, waiting: number): string {
   if (total === 0) return 'Nothing on the go — I am just vibing'
   const bits: string[] = []
-  if (busy) bits.push(`${busy} working`)
-  if (waiting) bits.push(`${waiting} need a look`)
+  if (busy) bits.push(`${busy} producing output`)
+  if (waiting) bits.push(`${waiting} paused`)
   if (bits.length === 0) return `${total} card${total === 1 ? '' : 's'}, all quiet`
   return bits.join(' · ')
 }
@@ -39,7 +39,7 @@ export function scanLine(seed: number): string {
 
 export const EMPTY_TIPS = [
   'Tip: right-click a folder in Explorer and pick “Open in Buddy”.',
-  'Tip: Ctrl+Shift+G cycles through tabs, grid and world.',
+  'Tip: Ctrl+Shift+G switches between tabs and grid.',
   'Tip: the catalog remembers every chat you have ever had.',
   'Tip: Alt+1 through Alt+9 jump straight to a terminal.',
   'Tip: broadcast mode types into every terminal at once.',

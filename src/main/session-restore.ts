@@ -5,7 +5,7 @@ import type { PersistedSession, RestoreItem, SessionSpec, Settings } from '@shar
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Validate the recorded file itself; never substitute the newest chat in a folder. */
-async function validate(session: PersistedSession): Promise<void> {
+export async function validate(session: PersistedSession): Promise<void> {
   if (!session || typeof session.cwd !== 'string' || !(await stat(session.cwd)).isDirectory()) throw Error('The project folder is unavailable.')
   const ref = session.resume
   if (!ref) {

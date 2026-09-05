@@ -11,7 +11,7 @@ for (const dir of [profile, testHome, project]) mkdirSync(dir)
 const callsFile = join(root, 'calls.jsonl'), mock = join(root, 'agent.mjs')
 writeFileSync(mock, `import {appendFileSync} from 'node:fs'; appendFileSync(${JSON.stringify(callsFile)}, JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()})+'\\n'); console.log('RESTORED '+process.argv.slice(2).join(' ')); process.stdin.resume();`)
 const command = `"${process.execPath}" "${mock}" {id}`
-const settings = { defaultShellId: 'cmd', trayIcon: false, closeToTray: false, desktopNotifications: false,
+const settings = { walkthroughVersion: 1, defaultShellId: 'cmd', trayIcon: false, closeToTray: false, desktopNotifications: false,
   claudeResumeCommand: command, codexResumeCommand: command, restoreOnLaunch: true }
 writeFileSync(join(profile, 'settings.json'), JSON.stringify(settings))
 const id1 = '11111111-1111-4111-8111-111111111111', id2 = '22222222-2222-4222-8222-222222222222'

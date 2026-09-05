@@ -48,7 +48,6 @@ export default function NewSessionDialog(): React.JSX.Element {
     })
     if (id) {
       store.setLocked(true)
-      if (store.layout === 'world') store.setLayout('tabs')
       close()
     } else {
       setError('The terminal could not be opened. Check the folder and try again.')

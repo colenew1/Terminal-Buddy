@@ -77,15 +77,8 @@ export function TopBar(): React.JSX.Element {
           >
             Grid
           </button>
-          <button
-            className={layout === 'world' ? 'is-on' : ''}
-            title="World — every agent as a creature (Ctrl+Shift+G)"
-            onClick={() => setLayout('world')}
-          >
-            World
-          </button>
         </div>
-        {layout !== 'world' && (
+        {(
           <button
             className={`icon-btn ${locked ? '' : 'is-warn'}`}
             title={
@@ -163,7 +156,7 @@ export function TabBar(): React.JSX.Element {
             ) : (
               <span className="tab-title">{s.title}</span>
             )}
-            {s.attention && <span className="dot attention" title="Went quiet — probably waiting on you" />}
+            {s.attention && <span className="dot attention" title="Time to take a look — click to acknowledge" />}
             {!s.attention && s.unseen && <span className="dot unseen" title="New output" />}
             {s.status === 'exited' && <span className="tab-dead">exited</span>}
             <button className="tab-close" data-popout={s.id} title={s.detached ? 'Show popped-out terminal' : 'Pop out terminal'}

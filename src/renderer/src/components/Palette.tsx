@@ -45,7 +45,7 @@ export default function Palette(): React.JSX.Element {
         label: `Switch view (now ${s.layout})`,
         hint: 'Ctrl+Shift+G',
         run: () => {
-          const order = ['tabs', 'grid', 'world'] as const
+          const order = ['tabs', 'grid'] as const
           s.setLayout(order[(order.indexOf(s.layout) + 1) % order.length])
         }
       },

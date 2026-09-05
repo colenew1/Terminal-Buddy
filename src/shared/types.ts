@@ -1,6 +1,6 @@
 /** Types shared between the Electron main process, the preload bridge and the renderer. */
 
-export type LayoutMode = 'tabs' | 'grid' | 'world'
+export type LayoutMode = 'tabs' | 'grid'
 export type Agent = 'claude' | 'codex'
 
 /** Explicit conversation identity. Never inferred from a folder's newest file. */
@@ -35,7 +35,7 @@ export interface ShellDef {
   args: string[]
 }
 
-/** Where a bubble sits in the world view. */
+/** Window/drag point; legacy saved spatial positions remain readable. */
 export interface Pos {
   x: number
   y: number
@@ -62,7 +62,7 @@ export interface SessionSpec {
   critter?: string
   /** Renderer-only: restore a saved grid footprint. */
   span?: Span
-  /** Renderer-only: restore a saved world position. */
+  /** Legacy spatial position, retained when reading old workspaces. */
   pos?: Pos
 }
 
@@ -191,6 +191,9 @@ export interface Settings {
   chime: boolean
   /** Native desktop alerts after a submitted terminal goes quiet or exits. */
   desktopNotifications: boolean
+  /** One-time opt-in migration: older releases enabled alerts by default. */
+  alertsOptInVersion: number
+  walkthroughVersion: number
   /** Stills every animation, including the buddy. */
   reduceMotion: boolean
   /** Click in the command line to put the cursor there, instead of arrowing over. */
@@ -224,7 +227,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'midnight',
   critters: true,
   chime: false,
-  desktopNotifications: true,
+  desktopNotifications: false,
+  alertsOptInVersion: 1,
+  walkthroughVersion: 0,
   reduceMotion: false,
   clickToPosition: true,
   critterPack: 'forest',

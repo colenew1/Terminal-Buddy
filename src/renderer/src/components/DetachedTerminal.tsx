@@ -13,6 +13,8 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
   const [title, setTitle] = useState('Opening terminal…')
   const [status, setStatus] = useState('Connecting to your live terminal…')
   const [error, setError] = useState('')
+  const [attention, setAttention] = useState(false)
+  const [reduceMotion, setReduceMotion] = useState(false)
   const dragging = useRef(false)
   useEffect(() => {
     let term: Terminal | null = null, fit: FitAddon | null = null, ready = false, disposed = false
@@ -25,6 +27,7 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
       if (disposed || term) return
       const { settings, snapshot, session } = value
       applyTheme(settings.theme)
+      setReduceMotion(settings.reduceMotion)
       setTitle(session.title); setStatus(value.exited ? `Process exited (${value.exitCode ?? 0})` : 'Live terminal · same running session')
       term = new Terminal({ cols: snapshot.cols, rows: snapshot.rows, fontSize: settings.fontSize, fontFamily: settings.fontFamily,
         scrollback: settings.scrollback, cursorBlink: settings.cursorBlink, theme: themeById(settings.theme).terminal, allowProposedApi: true })
@@ -44,7 +47,9 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
     const offData = window.buddy.pty.onData((sessionId, data) => { if (sessionId === id) term?.write(data) })
     const offExit = window.buddy.pty.onExit((sessionId, code) => { if (sessionId === id) setStatus(`Process exited (${code})`) })
     const offTitle = window.buddy.popout.onTitle(setTitle)
+    const offAttention = window.buddy.popout.onAttention(setAttention)
     const offSettings = window.buddy.popout.onSettings((settings) => {
+      setReduceMotion(settings.reduceMotion)
       applyTheme(settings.theme)
       if (!term) return
       term.options.fontSize = settings.fontSize; term.options.fontFamily = settings.fontFamily
@@ -72,11 +77,11 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
     const observer = new ResizeObserver(resize)
     observer.observe(host.current!)
     void window.buddy.popout.init(id).catch((reason) => setError(String(reason)))
-    return () => { disposed = true; observer.disconnect(); offInit(); offData(); offExit(); offTitle(); offSettings(); window.removeEventListener('keydown', onKey); term?.dispose(); terminal.current = null }
+    return () => { disposed = true; observer.disconnect(); offInit(); offData(); offExit(); offTitle(); offAttention(); offSettings(); window.removeEventListener('keydown', onKey); term?.dispose(); terminal.current = null }
   }, [id])
   const point = (event: React.PointerEvent): { x: number; y: number } => ({ x: event.screenX, y: event.screenY })
   return (
-    <div className="detached-app">
+    <div className={`detached-app ${attention ? 'needs-look' : ''} ${reduceMotion ? 'no-motion' : ''}`} onPointerDownCapture={() => window.buddy.popout.seen(id)} onKeyDownCapture={() => window.buddy.popout.seen(id)}>
       <header className="detached-toolbar">
         <div className="detached-grip" data-popout-grip title="Drag this handle to move; drop on Terminal Buddy’s docking strip to return"
           onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); dragging.current = true; window.buddy.popout.drag(id, 'start', point(event)) }}

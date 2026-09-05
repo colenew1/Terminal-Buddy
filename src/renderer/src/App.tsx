@@ -12,10 +12,11 @@ import { greeting } from './lib/copy'
 import { chime } from './lib/chime'
 import { drawBadge } from './lib/badge'
 import Buddy from './components/Buddy'
-import WorldView from './components/WorldView'
 import CloseSessionDialog from './components/CloseSessionDialog'
 import NewSessionDialog from './components/NewSessionDialog'
 import RestoreSessionDialog from './components/RestoreSessionDialog'
+import Walkthrough from './components/Walkthrough'
+import LinkSessionDialog from './components/LinkSessionDialog'
 
 export default function App(): React.JSX.Element {
   const ready = useStore((s) => s.ready)
@@ -24,12 +25,14 @@ export default function App(): React.JSX.Element {
   const settingsOpen = useStore((s) => s.settingsOpen)
   const newSessionOpen = useStore((s) => s.newSessionOpen)
   const restoreItems = useStore((s) => s.restoreItems)
+  const walkthroughOpen = useStore((s) => s.walkthroughOpen)
+  const linkSessionId = useStore((s) => s.linkSessionId)
   const broadcast = useStore((s) => s.broadcast)
   const toast = useStore((s) => s.toast)
-  const layout = useStore((s) => s.layout)
   const settings = useStore((s) => s.settings)
   const waiting = useStore((s) => s.sessions.filter((x) => x.attention).length)
   const total = useStore((s) => s.sessions.length)
+  const detachedAttention = useStore((s) => s.sessions.filter((x) => x.detached).map((x) => `${x.id}:${Number(x.attention)}`).join(','))
   const prevWaiting = useRef(0)
 
   const [searchOpen, setSearchOpen] = useState(false)
@@ -46,13 +49,22 @@ export default function App(): React.JSX.Element {
 
   // One pty bridge for every pane, rather than a listener per terminal.
   useEffect(() => {
+    for (const session of useStore.getState().sessions) {
+      if (session.detached) window.buddy.popout.attention(session.id, session.attention)
+    }
+  }, [detachedAttention])
+
+  useEffect(() => {
+    return window.buddy.popout.onSeen((id) => useStore.getState().patchSession(id, { attention: false, unseen: false }))
+  }, [])
+
+  useEffect(() => {
     const offState = window.buddy.popout.onState((id, detached) => {
       const handle = getTerm(id)
       if (handle) handle.detached = detached
       useStore.getState().patchSession(id, { detached })
       if (!detached) {
         useStore.getState().setActive(id)
-        if (useStore.getState().layout === 'world') useStore.getState().setLayout('tabs')
       }
     })
     const offSize = window.buddy.popout.onSize((id, cols, rows) => getTerm(id)?.term.resize(cols, rows))
@@ -76,7 +88,6 @@ export default function App(): React.JSX.Element {
       if (!s.sessions.some((x) => x.id === id)) return s.notify('That terminal has already been closed.')
       s.setActive(id)
       s.setLocked(true)
-      if (s.layout === 'world') s.setLayout('tabs')
       requestAnimationFrame(() => getTerm(id)?.term.focus())
     })
     const offNotificationError = window.buddy.app.onNotificationError((message) => useStore.getState().notify(message))
@@ -126,11 +137,17 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (useStore.getState().pendingCloseId || useStore.getState().newSessionOpen || useStore.getState().restoreItems || useStore.getState().restoring) return
+      if (useStore.getState().pendingCloseId || useStore.getState().newSessionOpen || useStore.getState().restoreItems || useStore.getState().restoring || useStore.getState().walkthroughOpen || useStore.getState().linkSessionId) return
       if (e.key === 'Escape' && searchOpen) {
         setSearchOpen(false)
         const id = useStore.getState().activeId
         if (id) getTerm(id)?.search.clearDecorations()
+        return
+      }
+      const state = useStore.getState()
+      if (e.key === 'Escape' && !e.isComposing && state.focusedSessionId && !state.settingsOpen && !state.paletteOpen && !(e.target as HTMLElement).closest('input:not(.xterm-helper-textarea), select, [contenteditable="true"]')) {
+        e.preventDefault()
+        useStore.setState({ focusedSessionId: null })
         return
       }
 
@@ -177,7 +194,7 @@ export default function App(): React.JSX.Element {
           s.cycle(-1)
           break
         case 'layout': {
-          const order = ['tabs', 'grid', 'world'] as const
+          const order = ['tabs', 'grid'] as const
           s.setLayout(order[(order.indexOf(s.layout) + 1) % order.length])
           break
         }
@@ -229,19 +246,14 @@ export default function App(): React.JSX.Element {
 
   return (
     <div
-      className={`app ${layout === 'world' ? 'is-world' : ''} ${broadcast ? 'is-broadcast' : ''} ${settings.reduceMotion ? 'no-motion' : ''}`}
+      className={`app ${broadcast ? 'is-broadcast' : ''} ${settings.reduceMotion ? 'no-motion' : ''}`}
     >
       <TopBar />
       <div className="body">
         {sidebarOpen && <Sidebar />}
         <main className="main">
-          {layout !== 'world' && <TabBar />}
-          {/*
-            The terminal area stays mounted in world view so every xterm keeps
-            its size and scrollback; the world simply covers it.
-          */}
+          <TabBar />
           <TerminalArea />
-          {layout === 'world' && <WorldView />}
           {searchOpen && (
             <div className="findbar">
               <input
@@ -275,6 +287,8 @@ export default function App(): React.JSX.Element {
       <CloseSessionDialog />
       {newSessionOpen && <NewSessionDialog />}
       {restoreItems && <RestoreSessionDialog items={restoreItems} />}
+      {walkthroughOpen && !restoreItems && <Walkthrough />}
+      {linkSessionId && <LinkSessionDialog sessionId={linkSessionId} />}
       {dockDrag.dragging && <div className={`dock-target ${dockDrag.over ? 'is-over' : ''}`}>Drop here to dock your terminal back</div>}
       {toast && <div className="toast">{toast}</div>}
     </div>

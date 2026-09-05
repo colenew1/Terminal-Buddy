@@ -10,7 +10,7 @@ const PORT = 9224
 const OUT = process.argv[2] ?? join(tmpdir(), 'terminal-buddy-grid.png')
 const WANT = 6
 const profile = mkdtempSync(join(tmpdir(), 'terminal-buddy-grid-'))
-writeFileSync(join(profile, 'settings.json'), JSON.stringify({ desktopNotifications: false }))
+writeFileSync(join(profile, 'settings.json'), JSON.stringify({ walkthroughVersion: 1, desktopNotifications: false }))
 
 const exe = process.env.BUDDY_EXE
 const bin = exe ?? (process.platform === 'win32' ? 'node_modules/electron/dist/electron.exe' : 'node_modules/.bin/electron')

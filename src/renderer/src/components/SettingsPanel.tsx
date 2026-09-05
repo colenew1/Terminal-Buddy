@@ -54,6 +54,11 @@ export default function SettingsPanel(): React.JSX.Element {
 
         <div className="modal-body settings">
           <section>
+            <h4>Getting started</h4>
+            <p className="muted">A short, click-through tour of terminals, layouts, pop-outs, recovery, and optional alerts.</p>
+            <button className="btn" data-replay-tour onClick={() => useStore.setState({ settingsOpen: false, walkthroughOpen: true })}>Replay walkthrough</button>
+          </section>
+          <section>
             <h4>Terminal</h4>
             <label className="field">
               <span>Default shell</span>
@@ -200,7 +205,7 @@ export default function SettingsPanel(): React.JSX.Element {
 
             <label className="field">
               <span>
-                Chime when a terminal wants you
+                Chime when output pauses
                 <small>Two soft in-app notes, independent of Windows notification sounds.</small>
               </span>
               <input
@@ -211,10 +216,10 @@ export default function SettingsPanel(): React.JSX.Element {
             </label>
 
             <label className="field">
-              <span>Desktop notifications<small>Alert after 8 seconds without output following terminal input, or when its process exits. Quiet means it may be done or waiting, not confirmed completion. Repeated pauses are limited to one alert per terminal every 30 seconds.</small></span>
+              <span>Desktop notifications — {settings.desktopNotifications ? 'On' : 'Off'}<small>Off by default. Opt in to Windows alerts and taskbar flashing after 8 seconds without output following terminal input, or when its process exits. A pause is not confirmed completion. Limited to one pause alert per terminal every 30 seconds.</small></span>
               <input type="checkbox" checked={settings.desktopNotifications} onChange={(e) => void setSettings({ desktopNotifications: e.target.checked })} />
             </label>
-            <button className="btn tiny" onClick={() => void window.buddy.app.testNotification().then((r) => notify(r.message)).catch(() => notify('Windows could not display the test notification.'))}>Send test desktop alert</button>
+            <button className="btn tiny" disabled={!settings.desktopNotifications} onClick={() => void window.buddy.app.testNotification().then((r) => notify(r.message)).catch(() => notify('Windows could not display the test notification.'))}>Send test desktop alert</button>
 
             <label className="field">
               <span>

@@ -1,6 +1,6 @@
 {
   "name": "terminal-buddy",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Friendly, organized terminals for your coding agents, with custom names and desktop alerts.",
   "main": "./out/main/index.js",
   "author": "Terminal Buddy contributors",
@@ -15,7 +15,9 @@
     "dist": "npm run icon && electron-vite build && electron-builder --win nsis portable",
     "postinstall": "electron-builder install-app-deps",
     "icon": "node scripts/make-icon.mjs",
-    "test": "npm run typecheck && npm run test:alerts && npm run test:submit && npm run test:screen && npm run build && npm run test:popout && npm run test:restore && npm run test:smoke && npm run test:feed && npm run test:grid && npm run test:resize && npm run test:world && npm run test:import && npm run test:registry",
+    "test": "npm run typecheck && npm run test:settings && npm run test:alerts && npm run test:submit && npm run test:screen && npm run build && npm run test:features && npm run test:popout && npm run test:restore && npm run test:smoke && npm run test:feed && npm run test:grid && npm run test:resize && npm run test:import && npm run test:registry",
+    "test:settings": "node scripts/verify-settings-store.mjs",
+    "test:features": "node scripts/verify-features.mjs",
     "test:popout": "node scripts/verify-popout.mjs",
     "test:screen": "node scripts/verify-terminal-screen.mjs",
     "test:restore": "node scripts/verify-restore.mjs",
@@ -24,7 +26,6 @@
     "test:alerts": "node scripts/verify-alerts.mjs",
     "test:smoke": "node scripts/smoke.mjs",
     "test:grid": "node scripts/verify-grid.mjs",
-    "test:world": "node scripts/verify-world.mjs",
     "test:import": "node scripts/verify-import.mjs",
     "test:registry": "node scripts/verify-registry.mjs",
     "test:feed": "node scripts/verify-feed.mjs"

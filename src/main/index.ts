@@ -20,7 +20,7 @@ import { loadSettings, saveSettings, loadWorkspace, saveWorkspace, cacheFile } f
 import { TrayController, setTaskbarBadge, setJumpList } from './tray'
 import { probeAgents } from './agents'
 import { FeedService } from './session-feed'
-import { prepareRestore, restoreSpec } from './session-restore'
+import { prepareRestore, restoreSpec, validate } from './session-restore'
 import { TerminalActivity, type TerminalAlert } from './terminal-activity'
 import { PopoutWindows } from './popouts'
 import {
@@ -41,7 +41,7 @@ import {
 app.setName('terminal-buddy')
 
 const shells = detectShells()
-let alertsEnabled = true
+let alertsEnabled = false
 const activity = new TerminalActivity((alert) => {
   void showTerminalNotification(alert).catch(() => sendToRenderer('app:notificationError', 'Windows could not display a desktop notification.'))
 }, () => alertsEnabled)
@@ -53,7 +53,7 @@ function showTerminalNotification(alert: TerminalAlert, test = false): Promise<{
   if (!Notification.isSupported()) return Promise.resolve({ ok: false, message: 'Desktop notifications are not supported on this system.' })
   return new Promise((resolve) => {
     const notification = new Notification({
-      title: test ? 'Terminal Buddy — test alert' : `${alert.title} — ${alert.kind === 'exit' ? 'process exited' : 'may need you'}`,
+      title: test ? 'Terminal Buddy — test alert' : `${alert.title} — ${alert.kind === 'exit' ? 'process exited' : 'output paused'}`,
       body: test ? 'Desktop alerts are ready. Click to return to Terminal Buddy.' : alert.kind === 'exit'
         ? 'The terminal process ended. Click to inspect its output.'
         : 'No output for 8 seconds. It may be finished, paused, or waiting for an answer. Click to open the terminal.',
@@ -272,6 +272,15 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle('app:testNotification', () => showTerminalNotification({ id: 'test', title: 'Terminal Buddy', kind: 'quiet' }, true))
+  ipcMain.handle('pty:link', async (e, id: string, chat: ChatEntry) => {
+    if (e.sender !== win?.webContents) throw Error('Link chats from the main workspace.')
+    const current = ptys.describe(id)?.session
+    if (!current) throw Error('This terminal has closed.')
+    const resume = { agent: chat.agent, id: chat.id, path: chat.path }
+    await validate({ ...current, cwd: chat.cwd, resume })
+    // Only recovery metadata changes. Never write to, restart, or replace the PTY.
+    return ptys.link(id, resume, chat.cwd)
+  })
 
   // Which panes are currently running an agent, keyed by session id.
   ipcMain.handle('pty:probeAgents', async () => {
@@ -286,6 +295,11 @@ function registerIpc(): void {
   ipcMain.handle('settings:set', (_e, s: Settings) => {
     saveSettings(s)
     alertsEnabled = s.desktopNotifications
+    if (!alertsEnabled) {
+      win?.flashFrame(false)
+      for (const notification of activeNotifications.values()) notification.close()
+      activeNotifications.clear()
+    }
     ptys.setScrollback(s.scrollback)
     popouts.settingsChanged(s)
     tray?.enable(s.trayIcon)
@@ -369,7 +383,7 @@ function registerIpc(): void {
       tray?.setStatus(total, waiting)
       setTaskbarBadge(win, badge, waiting)
       // Bounce the taskbar button once when something starts waiting.
-      if (waiting > 0 && win && !win.isFocused()) win.flashFrame(true)
+      if (alertsEnabled && waiting > 0 && win && !win.isFocused()) win.flashFrame(true)
       else win?.flashFrame(false)
     }
   )

@@ -41,7 +41,7 @@ for (const agent of ['claude','codex']) {
 }
 writeFileSync(join(profile, 'settings.json'), JSON.stringify({
   claudeResumeCommand: mockCommand, codexResumeCommand: mockCommand, trayIcon: false,
-  defaultShellId: 'cmd', desktopNotifications: false
+  walkthroughVersion: 1, defaultShellId: 'cmd', desktopNotifications: false
 }))
 const claudeDir = join(testHome, '.claude', 'projects', project.replace(/[^A-Za-z0-9]/g, '-'))
 const codexDir = join(testHome, '.codex', 'sessions', '2025', '01', '01')
@@ -191,8 +191,8 @@ try {
     await until(`window.__output[${JSON.stringify(importedId)}]?.includes(${JSON.stringify('KEY:'+hex)})`)
   }
   check('menu arrows, Escape, and interrupt reach the terminal',true)
-  await until(`!!document.querySelector('.cell.is-active .terminal-status.is-quiet')`)
-  check('paused output has a visible status that does not claim task completion',await ev(`document.querySelector('.cell.is-active .terminal-status').textContent==='Quiet'`))
+  await until(`!!document.querySelector('.cell.is-active .terminal-status.is-attention')`)
+  check('paused output requests a look without claiming task completion',await ev(`document.querySelector('.cell.is-active .terminal-status').textContent==='Take a look' && document.querySelector('.cell.is-active').classList.contains('needs-look')`))
   await ev(`document.querySelector('.cell.is-active .xterm-helper-textarea').focus()`)
   await until(`document.activeElement.classList.contains('xterm-helper-textarea')`)
   await type('nativekeys')
@@ -239,18 +239,17 @@ try {
   check('background telemetry follows its exact file without duplicates',await ev(`window.__feed[${JSON.stringify(codexId)}].length===3`))
   await newTerminal()
   await until(`document.querySelectorAll('.cell').length===4`)
-  await button('World'); await drop('Imported Claude history','.orb.is-active')
-  await until(`!document.querySelector('.world') && !!document.querySelector('.cell.is-active .xterm-helper-textarea')`)
-  check('World import opens a live terminal, never a listening-only sheet',await ev(`!document.querySelector('.cell.is-active .agent')`))
-  await button('World')
-  await ev(`document.querySelector('.orb.is-active .session-name-button').click()`)
+  await button('Grid'); await drop('Imported Claude history')
+  await until(`!!document.querySelector('.cell.is-active .xterm-helper-textarea')`)
+  check('grid import opens a live terminal',await ev(`!document.querySelector('.cell.is-active .agent')`))
+  await ev(`document.querySelector('.cell.is-active .session-name-button').click()`)
   await until(`!!document.querySelector('.session-rename')`)
-  await send('Input.insertText',{text:'World persona'})
+  await send('Input.insertText',{text:'Grid persona'})
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13})
-  check('names are editable directly on World inhabitants',await ev(`document.querySelector('.orb.is-active .session-name-button').textContent.includes('World persona')`))
-  await newTerminal('.world-actions .primary')
-  await until(`!document.querySelector('.world') && document.querySelectorAll('.cell').length===5`)
-  check('World New opens a keyboard-ready terminal',await ev(`document.activeElement.classList.contains('xterm-helper-textarea')`))
+  check('names are editable directly on grid panes',await ev(`document.querySelector('.cell.is-active .session-name-button').textContent.includes('Grid persona')`))
+  await newTerminal()
+  await until(`document.querySelectorAll('.cell').length===5`)
+  check('grid plus opens a keyboard-ready terminal',await ev(`document.activeElement.classList.contains('xterm-helper-textarea')`))
   check('only native terminal inputs exist in every pane',await ev(`document.querySelectorAll('.cell textarea').length===5 && !document.querySelector('.terminal-entry, .composer-input, .composer-send')`))
   // A plus is a decision, not a half-open terminal in the current project.
   await ev(`document.querySelector('.tab').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))`)

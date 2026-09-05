@@ -13,9 +13,9 @@ Running several coding agents at once means keeping track of their terminals, pr
 
 Terminal Buddy puts the **live terminal first**, including trust prompts, approval menus, errors, and slash commands. The terminal is the only place to type or paste dictation; Enter, arrows, Escape, and Ctrl+C go directly to the running program. Nothing automatically answers approval questions.
 
-Click the title's pencil to give an instance a local name such as **Praveen's persona**. Labels persist in the workspace without modifying Claude or Codex history files. Tabs, grid cards, and World inhabitants use the same name.
+Click the title's pencil to give an instance a local name such as **Praveen's persona**. Labels persist in the workspace without modifying Claude or Codex history files. Tabs and grid cards use the same name.
 
-**Desktop notifications** are on by default and configurable in Settings. After submitted input, eight seconds of output silence produces a “may need you” alert; an actual terminal-process exit is labeled separately. Silence is a heuristic, not proof of task completion. Pauses are rate-limited to one notification per terminal every 30 seconds. Clicking an alert opens its live terminal. Settings includes a test button; Windows notification permissions and Do not disturb still apply. Monitoring runs in the main process, including while the app is minimized.
+**Desktop notifications and chimes** are off by default, including the one-time migration from older default-on releases. Opt in through Settings. After submitted input, eight seconds of output silence produces an “output paused” alert; an actual terminal-process exit is labeled separately. Silence is a heuristic, not proof of task completion. Pauses are rate-limited to one notification per terminal every 30 seconds. Clicking an alert opens its live terminal. Settings includes a test button; Windows notification permissions and Do not disturb still apply. Monitoring runs in the main process, including while the app is minimized.
 
 Three things it fixes:
 
@@ -27,11 +27,11 @@ It is a personal tool, published in case it's useful. No telemetry, no account, 
 
 ## One terminal, no transcript view
 
-The **+** button opens a chooser without creating a terminal. Start a new Claude chat, a new Codex chat, or a plain terminal; every fresh chooser defaults to your home directory (`C:\Users\Owner` on this PC). Choose a project folder first when needed. **Resume saved chat** opens the catalog directly, without leaving an unwanted terminal behind. The keyboard shortcut, World New button, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
+The **+** button opens a chooser without creating a terminal. Start a new Claude chat, a new Codex chat, or a plain terminal; every fresh chooser defaults to your home directory (`C:\Users\Owner` on this PC). Choose a project folder first when needed. **Resume saved chat** opens the catalog directly, without leaving an unwanted terminal behind. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
 
 Each instance shows the agent's native terminal output. Terminal Buddy enables truecolor for its child terminals, rather than inheriting a launcher's `NO_COLOR` setting. Colors come from the running program and the selected terminal theme; output is not rewritten into chat bubbles.
 
-A colored header reports **Output active**, **Opening**, **Quiet**, **May need you**, or **Exited**. These describe observed activity, not confirmed agent completion. There is no separate composer or Send button. Pasted text uses the terminal's paste handling, including bracketed paste when enabled by the running program; Terminal Buddy does not append Enter. Multiline editing and menu behavior belong to the shell or agent.
+A colored header reports **Output active**, **Opening**, **Quiet**, **Take a look**, or **Exited**. These describe observed activity, not confirmed agent completion. There is no separate composer or Send button. Pasted text uses the terminal's paste handling, including bracketed paste when enabled by the running program; Terminal Buddy does not append Enter. Multiline editing and menu behavior belong to the shell or agent.
 
 Saved chats remain in the catalog and can be resumed or exported as Markdown. Dropping one onto an empty pane replaces that terminal in place; existing input and messages protect occupied panes. Background history reading is used only for tool/MCP activity and occupancy tracking, never as a separate session interface.
 
@@ -47,9 +47,9 @@ Closing a pop-out (including Ctrl+Shift+W) docks it instead of stopping its proc
 
 **Pick up where you left off**
 
-After exiting the entire app, the next launch asks whether to reopen all available sessions, choose individual ones, browse saved chats, or start fresh. Names, folders, ordering, active pane, grid proportions and World positions are saved continuously and flushed on normal exit. Closing the app while the chooser is open keeps the previous recovery snapshot. Start fresh clears the reopen list, never the agents' conversation history.
+After exiting the entire app, the next launch asks whether to reopen all available sessions, choose individual ones, browse saved chats, or start fresh. Names, folders, ordering, active pane, grid proportions are saved continuously and flushed on normal exit. Closing the app while the chooser is open keeps the previous recovery snapshot. Start fresh clears the reopen list, never the agents' conversation history.
 
-Chats imported from the catalog record their exact Claude/Codex session ID. New Claude chats launched by the chooser receive an explicit ID and become resumable once Claude writes their history. Missing folders/files and known agents without a linked ID are flagged, not silently replaced with another chat. New Codex chats and agents started manually in a shell need to be selected from Saved chats; there is no reliable process-to-session link for them yet. Legacy workspaces reopen terminal folders only. Changing conversations inside a CLI (for example `/resume` or `/clear`) does not update the recorded link; use the catalog to reopen the desired conversation as a new instance.
+Chats imported from the catalog record their exact Claude/Codex session ID. New Claude chats launched by the chooser receive an explicit ID and become resumable once Claude writes their history. Missing folders/files and known agents without a linked ID are flagged, not silently replaced with another chat. For new Codex chats or agents started manually, click **Link chat** in the terminal header and choose the exact saved conversation. Buddy validates its ID against the history file without restarting the live process. **Linked** reviews or changes that association. Changing conversations inside a CLI (for example `/resume` or `/clear`) does not automatically update the link; select the new conversation with this control. Workspace writes are atomic, with a last-known-good `.bak` fallback for corrupt or invalid snapshots.
 
 This is conversation recovery, not a background terminal daemon: closing the app stops running processes. Unsent input, arbitrary shell state and scrollback are not restored, and previous tasks are not automatically resubmitted. Agent trust/approval prompts remain native terminal interactions. Disable the startup prompt in Settings if desired.
 
@@ -60,11 +60,15 @@ This is conversation recovery, not a background terminal daemon: closing the app
 - Editable header labels, recognizable critters, and smoothly resizable grid rows and columns
 - Native ANSI colors and a visible activity label
 
-**World view**
-- Every live terminal becomes a movable inhabitant, with motion reserved for meaningful state
-- Working agents spin; agents that may need you wave; click one to open its existing live terminal in Tabs
-- Tools observed in the live transcript orbit as satellites, with MCP servers identified separately
-- The wording is deliberately literal: observed use is shown now; live connection health will only appear once an agent reports it authoritatively
+**Focus and attention**
+
+Use ⛶ or double-click empty header space to fill the main area with one terminal. Escape restores the exact prior grid without restarting any terminal. In focus mode, Escape is reserved for returning to the layout.
+
+A faint amber border pulses on a pane and its tab after an identified agent's output pauses, or a used terminal exits. The light stays on through subsequent output until you click/open the terminal; no reply is required to dismiss it. Pop-outs share the same cue and acknowledgement. Calm mode and the system reduced-motion preference use a steady border. This indicates something to inspect, not confirmed completion or an approval request. World view has been removed; old World workspaces open in Grid with their sessions preserved.
+
+**First-run walkthrough**
+
+A seven-step, skippable tour highlights the app's controls on first launch. Back/Next, Skip, and Escape are supported; completion is saved. A pending recovery chooser is shown first. Replay it from **Settings → Getting started → Replay walkthrough**. The tour never sends commands, launches an agent, or changes your layout.
 
 **The buddy**
 - A small creature in the title bar whose mood is real state, not decoration: **asleep** with nothing open, **calm** when all is quiet, **working** while output streams, and visibly **agitated** the moment a pane starts waiting on you. Click it to jump straight to whichever pane that is.
@@ -258,7 +262,7 @@ The grid is locked by default, because a stray drag while you are working should
 - double-click a divider to balance its neighbors, or focus it and use arrow keys for fine adjustments
 - proportions persist across restarts and layout switches; changing the grid's row/column count uses equal sizes for the changed axis
 
-Dividers keep neighboring tracks at least 160px wide or 110px high when space allows. The old whole-cell corner sizing is replaced by a regular grid; terminal order, names, running processes, and World positions are preserved.
+Dividers keep neighboring tracks at least 160px wide or 110px high when space allows. The old whole-cell corner sizing is replaced by a regular grid; terminal order, names, and running processes are preserved.
 
 Movement is animated with a FLIP pass: every pane's position is measured before and after the reflow, then each one starts at its old spot and glides to the new one. Without it a reorder teleports and it's genuinely hard to see what went where. Calm mode turns it off.
 
@@ -289,17 +293,18 @@ What does work, and covers most of the need:
 npm run dev         # electron-vite dev server with HMR
 npm run typecheck   # tsc over main, preload and renderer
 npm run build       # compile to out/
-npm test            # typecheck + build + all five suites below
+npm test            # typecheck + build + regression suites
 ```
 
-The tests drive the **real application**, not mocks. Electron runs in disposable profiles, and the feed fixture gets a disposable home folder, so the suite never resets your actual workspace or writes into your real agent history.
+UI tests drive the **real application** with isolated profiles and local mock agents where needed; unit tests cover persistence, notification timing, and terminal transport. Electron runs in disposable profiles, and the feed fixture gets a disposable home folder, so the suite never resets your actual workspace or writes into your real agent history.
 
 | Script | What it proves |
 | --- | --- |
 | `npm run test:smoke` | Boots the app over the Chrome DevTools Protocol, spawns a pty and round-trips `echo` through it, confirms the catalog indexed real skills/chats/projects, toggles the sidebar and grid, saves a screenshot. |
-| `npm run test:feed` | Writes isolated Claude and Codex transcript fixtures, verifies live tailing and readable tool calls, and proves Codex MCP use appears as a World satellite. |
+| `npm run test:feed` | Writes isolated Claude and Codex transcript fixtures, verifies live tailing and readable tool calls, including Codex MCP server names. |
 | `npm run test:grid` | Opens 6 terminals, tiles them, checks every pane has real geometry and a unique critter, and proves ordinary shell prompts do not raise false attention alerts. |
-| `npm run test:world` | Opens 5 terminals, checks spatial geometry, hidden-terminal isolation, conversation opening and drag rearrangement, then captures the World view. |
+| `npm run test:features` | Verifies first-run/replay/skip walkthrough, legacy layout migration, attention acknowledgement, focus/Escape, and explicit recovery linking. |
+| `npm run test:settings` | Verifies opt-in alert migration, saved walkthrough preferences, and corrupt-workspace fallback. |
 | `npm run test:registry` | Round-trips the generated `.reg` through the real `reg.exe` under a scratch key (paths with spaces and all), then deletes it. |
 
 The disposable profile also gives test runs their own single-instance lock, so your installed copy can stay open.

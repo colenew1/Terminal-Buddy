@@ -19,7 +19,7 @@ const HOME = join(testRoot, 'home')
 const profile = join(testRoot, 'profile')
 mkdirSync(HOME, { recursive: true })
 mkdirSync(profile, { recursive: true })
-writeFileSync(join(profile, 'settings.json'), JSON.stringify({ desktopNotifications: false }))
+writeFileSync(join(profile, 'settings.json'), JSON.stringify({ walkthroughVersion: 1, desktopNotifications: false }))
 const slug = HOME.replace(/[^A-Za-z0-9]/g, '-')
 const projectDir = join(HOME, '.claude', 'projects', slug)
 const transcript = join(projectDir, `feedtest-${Date.now()}.jsonl`)
@@ -155,7 +155,7 @@ try {
   check('nothing is replayed twice', once === 1, `first turn appears ${once}x`)
 
   // A second pane proves the current Codex response-item format and its MCP
-  // namespaces become readable tool activity and a World-view satellite.
+  // namespaces become readable tool activity with an explicit server name.
   await newTerminal()
   await sleep(900)
   const now = new Date()
@@ -198,9 +198,6 @@ try {
   check('Codex response items join the conversation', codexState.bubbles.includes('Codex feed pong'))
   check('Codex MCP calls identify their server', codexState.tools.some((t) => /filesystem/.test(t)), JSON.stringify(codexState.tools))
 
-  await ev(`[...document.querySelectorAll('.seg button')].find(b => b.textContent === 'World')?.click()`)
-  await sleep(700)
-  check('observed MCP use becomes a satellite', await ev(`[...document.querySelectorAll('.sat.is-mcp')].some(s => /filesystem/.test(s.textContent))`))
 
   // Telemetry never covers the real terminal.
   await ev(`[...document.querySelectorAll('.seg button')].find(b => b.textContent === 'Grid')?.click()`)

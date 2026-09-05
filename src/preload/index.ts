@@ -27,6 +27,10 @@ function on<A extends unknown[]>(channel: string, cb: (...args: A) => void): Uns
 
 const api = {
   popout: {
+    attention: (id: string, value: boolean): void => ipcRenderer.send('popout:attention', id, value),
+    seen: (id: string): void => ipcRenderer.send('popout:seen', id),
+    onAttention: (cb: (value: boolean) => void): Unsub => on('popout:attention', cb),
+    onSeen: (cb: (id: string) => void): Unsub => on('popout:seen', cb),
     open: (id: string, point?: Pos): Promise<void> => ipcRenderer.invoke('popout:open', id, point),
     init: (id: string): Promise<void> => ipcRenderer.invoke('popout:init', id),
     dock: (id: string): void => ipcRenderer.send('popout:dock', id),
@@ -45,6 +49,7 @@ const api = {
   },
 
   pty: {
+    link: (id: string, chat: ChatEntry): Promise<SessionInfo> => ipcRenderer.invoke('pty:link', id, chat),
     create: (spec: SessionSpec): Promise<SessionInfo> => ipcRenderer.invoke('pty:create', spec),
     write: (id: string, data: string, broadcast = false): void => ipcRenderer.send('pty:write', id, data, broadcast),
     submit: (id: string, data: string): Promise<void> => ipcRenderer.invoke('pty:submit', id, data),

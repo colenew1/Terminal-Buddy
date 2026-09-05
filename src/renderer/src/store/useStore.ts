@@ -32,7 +32,7 @@ export interface Session {
   critter: Critter
   /** Grid footprint in cells. Only meaningful in grid view. */
   span: Span
-  /** Where this bubble sits in the world view. */
+  /** Legacy spatial position, kept for backwards-compatible workspace saves. */
   pos: Pos
   hasInput: boolean
   hasConversation: boolean
@@ -59,6 +59,9 @@ interface State {
   settings: Settings
   sessions: Session[]
   activeId: string | null
+  focusedSessionId: string | null
+  walkthroughOpen: boolean
+  linkSessionId: string | null
   pendingCloseId: string | null
   layout: LayoutMode
   gridSizes: { columns: number[]; rows: number[] }
@@ -154,6 +157,9 @@ export const useStore = create<State & Actions>((set, get) => ({
   settings: DEFAULT_SETTINGS,
   sessions: [],
   activeId: null,
+  focusedSessionId: null,
+  walkthroughOpen: false,
+  linkSessionId: null,
   pendingCloseId: null,
   layout: 'tabs',
   gridSizes: { columns: [], rows: [] },
@@ -197,6 +203,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     set({
       shells,
       settings: { ...settings, defaultShellId },
+      walkthroughOpen: settings.walkthroughVersion < 1,
       layout: workspace.layout ?? settings.layout,
       gridSizes: workspace.gridSizes ?? { columns: [], rows: [] }
     })
@@ -301,7 +308,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     }
   },
 
-  markInput(id) { get().patchSession(id, { hasInput: true }) },
+  markInput(id) { get().patchSession(id, { hasInput: true, attention: false, unseen: false }) },
 
   closeSession(id, confirmed = false) {
     const current = get().sessions.find((s) => s.id === id)
@@ -335,6 +342,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     if (get().sessions.find((s) => s.id === id)?.detached) window.buddy.popout.focus(id)
     set((s) => ({
       activeId: id,
+      focusedSessionId: s.focusedSessionId === id ? id : null,
       sessions: s.sessions.map((x) => (x.id === id ? { ...x, attention: false, unseen: false } : x))
     }))
     get().persist()
@@ -457,7 +465,7 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
 
   setLayout(layout) {
-    set({ layout })
+    set({ layout, focusedSessionId: null })
     get().persist()
   },
 
@@ -466,7 +474,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     set((s) => ({
       sessions: s.sessions.map((x) =>
         x.id === id
-          ? { ...x, lastDataAt: now, busy: true, attention: false, unseen: x.id === s.activeId ? false : true }
+          ? { ...x, lastDataAt: now, busy: true, unseen: true }
           : x
       )
     }))
@@ -479,17 +487,17 @@ export const useStore = create<State & Actions>((set, get) => ({
   markExit(id, code) {
     set((s) => ({
       sessions: s.sessions.map((x) =>
-        x.id === id ? { ...x, status: 'exited', exitCode: code, busy: false, attention: false } : x
+        x.id === id ? { ...x, status: 'exited', exitCode: code, busy: false, attention: x.attention || x.hasInput, unseen: true } : x
       )
     }))
   },
 
   /**
-   * A pane that was producing output and then went quiet is usually an agent
-   * waiting on you. Flag it, unless you are already looking at it.
+   * Quiet output is a cue to inspect, not proof of completion or approval.
+   * Keep that cue until the user explicitly acknowledges the terminal.
    */
   sweepAttention() {
-    const { sessions, settings, activeId } = get()
+    const { sessions, settings } = get()
     const now = Date.now()
     let changed = false
     const next = sessions.map((s) => {
@@ -498,7 +506,8 @@ export const useStore = create<State & Actions>((set, get) => ({
       changed = true
       // A plain shell also emits output and then goes quiet. Only a pane that
       // has produced an agent transcript should ever claim it needs the user.
-      return { ...s, busy: false, attention: s.id !== activeId && !!get().agents[s.id] }
+      // Latch until an explicit look/input. Further output cannot dismiss it.
+      return { ...s, busy: false, attention: s.attention || (s.unseen && !!get().agents[s.id]) }
     })
     if (changed) set({ sessions: next })
   },

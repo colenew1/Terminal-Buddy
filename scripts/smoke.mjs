@@ -12,7 +12,7 @@ import { join } from 'node:path'
 const PORT = 9222
 const OUT = process.argv[2] ?? join(tmpdir(), 'terminal-buddy-smoke.png')
 const profile = mkdtempSync(join(tmpdir(), 'terminal-buddy-smoke-'))
-writeFileSync(join(profile, 'settings.json'), JSON.stringify({ desktopNotifications: false }))
+writeFileSync(join(profile, 'settings.json'), JSON.stringify({ walkthroughVersion: 1, desktopNotifications: false }))
 
 // BUDDY_EXE points the harness at a packaged build instead of the dev output.
 const packaged = process.env.BUDDY_EXE

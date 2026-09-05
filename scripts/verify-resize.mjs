@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 const profile = mkdtempSync(join(tmpdir(), 'buddy-resize-'))
-writeFileSync(join(profile,'settings.json'),JSON.stringify({desktopNotifications:false,defaultShellId:'cmd',trayIcon:false}))
+writeFileSync(join(profile,'settings.json'),JSON.stringify({walkthroughVersion:1,desktopNotifications:false,defaultShellId:'cmd',trayIcon:false}))
 writeFileSync(join(profile,'workspace.json'),JSON.stringify({layout:'grid',sessions:[1,2].map(i=>({cwd:profile,shellId:'cmd',title:'Resize '+i}))}))
 const exe=process.env.BUDDY_EXE ?? 'node_modules/electron/dist/electron.exe'
 const pending=new Map(), errors=[]

@@ -8,6 +8,7 @@ interface Detached {
   ready: boolean
   queue: { data: string; seq: number }[]
   bytes: number
+  attention?: boolean
   drag?: { pointer: Pos; origin: Pos }
   timeout: ReturnType<typeof setTimeout>
 }
@@ -109,6 +110,7 @@ export class PopoutWindows {
     this.windows.set(id, entry)
     this.send('popout:state', id, true)
     child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    child.on('focus', () => this.send('popout:seen', id))
     child.on('close', (event) => {
       if (this.stopping) return
       event.preventDefault(); this.dock(id)
@@ -143,6 +145,16 @@ export class PopoutWindows {
   }
 
   register(): void {
+    ipcMain.on('popout:attention', (e, id: string, value: boolean) => {
+      if (e.sender !== this.primary()?.webContents) return
+      const entry = this.windows.get(id)
+      if (!entry) return
+      entry.attention = value === true
+      if (entry.ready) entry.window.webContents.send('popout:attention', entry.attention)
+    })
+    ipcMain.on('popout:seen', (e, id: string) => {
+      if (this.owner(e.sender, id)) this.send('popout:seen', id)
+    })
     ipcMain.handle('popout:open', async (e, id: string, point?: Pos) => {
       if (e.sender !== this.primary()?.webContents) throw Error('Only the workspace can detach a terminal.')
       await this.open(id, point)
@@ -158,6 +170,7 @@ export class PopoutWindows {
       entry.window.webContents.send('popout:init', { ...this.ptys.describe(id), snapshot, settings: this.settings() })
       for (const frame of entry.queue) if (frame.seq > snapshot.seq) entry.window.webContents.send('pty:data', id, frame.data, frame.seq)
       entry.queue = []; entry.bytes = 0; entry.ready = true
+      entry.window.webContents.send('popout:attention', !!entry.attention)
       clearTimeout(entry.timeout)
       entry.window.show(); entry.window.focus()
     })

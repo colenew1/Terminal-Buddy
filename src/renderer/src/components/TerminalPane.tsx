@@ -86,6 +86,8 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
     // preventDefault, which is what used to swallow Ctrl+V as a raw 0x16.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
+      const s = useStore.getState()
+      if (e.key === 'Escape' && s.focusedSessionId && !s.settingsOpen && !s.paletteOpen && !s.newSessionOpen && !s.pendingCloseId && !s.walkthroughOpen && !s.linkSessionId) return false
       if (matchShortcut(e) !== null) return false
       const clip = matchClipboard(e)
       if (clip === 'paste' || clip === 'cut') return false

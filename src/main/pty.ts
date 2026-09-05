@@ -3,7 +3,7 @@ import { existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { WebContents } from 'electron'
-import type { SessionInfo, SessionSpec, ShellDef } from '@shared/types'
+import type { ResumeRef, SessionInfo, SessionSpec, ShellDef } from '@shared/types'
 import { resolveShell } from './shells'
 import { Terminal as HeadlessTerminal } from '@xterm/headless'
 import { SerializeAddon } from '@xterm/addon-serialize'
@@ -298,6 +298,13 @@ export class PtyManager {
   rename(id: string, title: string): void {
     const e = this.entries.get(id)
     if (e) e.info.title = title
+  }
+
+  link(id: string, resume: ResumeRef, cwd: string): SessionInfo {
+    const entry = this.entries.get(id)
+    if (!entry) throw Error('This terminal has closed.')
+    entry.info = { ...entry.info, resume, cwd }
+    return entry.info
   }
 
   snapshot(id: string): Promise<TerminalSnapshot> {
