@@ -8,6 +8,7 @@ export default function NewSessionDialog(): React.JSX.Element {
   const [cwd, setCwd] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [choosingAgent, setChoosingAgent] = useState(false)
   const close = (): void => useStore.getState().setNewSessionOpen(false)
 
   useEffect(() => {
@@ -59,32 +60,42 @@ export default function NewSessionDialog(): React.JSX.Element {
   return (
     <dialog ref={dialog} className="new-session-dialog" aria-labelledby="new-session-title"
       onCancel={(event) => { event.preventDefault(); if (!inFlight.current) close() }}>
-      <h2 id="new-session-title">Open something new</h2>
-      <p>Start fresh, choose a project folder, or pick up a saved chat.</p>
+      <h2 id="new-session-title">{choosingAgent ? 'Start a new chat' : 'What would you like to open?'}</h2>
+      <p>{choosingAgent ? 'Choose an assistant for a fresh conversation in this folder.' : 'Pick a saved chat, start a new one, or open a terminal.'}</p>
       <div className="new-session-folder">
         <span>Start in</span>
         <code title={cwd} data-new-cwd>{cwd || 'Finding your home folder…'}</code>
-        <button className="btn" data-new-folder disabled={busy} onClick={() => void chooseFolder()}>Choose folder…</button>
       </div>
       <div className="new-session-choices">
-        <button className="btn" data-new-kind="claude" disabled={busy || !cwd} onClick={() => void launch('claude')}>
-          <strong>New Claude chat</strong><span>Fresh conversation in this folder</span>
-        </button>
-        <button className="btn" data-new-kind="codex" disabled={busy || !cwd} onClick={() => void launch('codex')}>
-          <strong>New Codex chat</strong><span>Fresh conversation in this folder</span>
-        </button>
-        <button className="btn" data-new-kind="shell" disabled={busy || !cwd} onClick={() => void launch('shell')}>
-          <strong>Terminal only</strong><span>Run commands, install tools, or update Codex</span>
-        </button>
+        {choosingAgent ? <>
+          <button className="btn" data-new-kind="claude" disabled={busy || !cwd} onClick={() => void launch('claude')}>
+            <strong>New Claude chat</strong><span>Fresh conversation in this folder</span>
+          </button>
+          <button className="btn" data-new-kind="codex" disabled={busy || !cwd} onClick={() => void launch('codex')}>
+            <strong>New Codex chat</strong><span>Fresh conversation in this folder</span>
+          </button>
+        </> : <>
+          <button className="btn" data-new-resume disabled={busy} onClick={() => {
+            useStore.getState().setSidebar(true, 'chats')
+            close()
+            requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.sidebar input')?.focus())
+          }}>
+            <strong>Pick a chat</strong><span>Continue a saved conversation</span>
+          </button>
+          <button className="btn" data-new-chat disabled={busy} onClick={() => setChoosingAgent(true)}>
+            <strong>Start a new chat</strong><span>Choose Claude or Codex</span>
+          </button>
+          <button className="btn" data-new-folder disabled={busy} onClick={() => void chooseFolder()}>
+            <strong>Open folder…</strong><span>Choose the folder for your new chat or terminal</span>
+          </button>
+          <button className="btn" data-new-kind="shell" disabled={busy || !cwd} onClick={() => void launch('shell')}>
+            <strong>Just start fresh</strong><span>Open a plain terminal for commands or tool updates</span>
+          </button>
+        </>}
       </div>
-      <p className="muted">To update a CLI, choose Terminal only and use its update command at the shell prompt. Close that CLI’s running sessions first, then reopen it after updating.</p>
       {error && <p className="new-session-error" role="alert">{error}</p>}
       <div className="new-session-actions">
-        <button className="btn" data-new-resume disabled={busy} onClick={() => {
-          useStore.getState().setSidebar(true, 'chats')
-          close()
-          requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.sidebar input')?.focus())
-        }}>Resume saved chat…</button>
+        {choosingAgent && <button className="btn" data-new-back disabled={busy} onClick={() => setChoosingAgent(false)}>Back</button>}
         <button className="btn" data-new-cancel autoFocus disabled={busy} onClick={close}>Cancel</button>
       </div>
     </dialog>

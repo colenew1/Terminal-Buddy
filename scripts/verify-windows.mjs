@@ -53,6 +53,12 @@ async function connect(find) {
 }
 const workspacePage = id => page => new URL(page.url).searchParams.get('workspace') === id
 const ready = client => until(() => client.ev("!!document.querySelector('.xterm-helper-textarea')"), 'terminal ready')
+async function chooseFresh(client) {
+  await until(() => client.ev(`!!document.querySelector('[data-new-kind="shell"]:not(:disabled)')`), 'new workspace chooser')
+  assert.equal(await client.ev("document.querySelectorAll('.cell').length"), 0)
+  assert.equal(await client.ev("document.querySelectorAll('.new-session-choices > button').length"), 4)
+  await client.ev(`document.querySelector('[data-new-kind="shell"]').click()`)
+}
 const sessionId = client => client.ev("document.querySelector('.tab[data-session-id]').dataset.sessionId")
 async function boot() {
   const env = { ...process.env, HOME: testHome, USERPROFILE: testHome }
@@ -90,11 +96,13 @@ async function write(client, id, text) {
 try {
   await boot()
   let first = await connect(workspacePage('primary'))
+  await chooseFresh(first)
   await ready(first)
   await first.ev("document.querySelector('[data-new-window]').click()")
   await until(async () => (await first.ev('window.buddy.app.windows()')).length === 2, 'second window')
   const secondId = (await first.ev('window.buddy.app.windows()')).find(w => !w.current).id
   let second = await connect(workspacePage(secondId))
+  await chooseFresh(second)
   await ready(second)
   const a = await sessionId(first), b = await sessionId(second)
   assert.notEqual(a, b)

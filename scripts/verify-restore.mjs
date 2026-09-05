@@ -106,8 +106,12 @@ try {
 
   seed();const beforeFresh=calls().length
   await launch();await ev("document.querySelector('[data-restore-fresh]').click()")
-  await until("!document.querySelector('.restore-session-dialog') && document.querySelectorAll('.cell').length===1")
-  check('Start fresh opens only a home terminal, with no agents',saved().sessions.length===1 && saved().sessions[0].cwd.toLowerCase()===testHome.toLowerCase() && !saved().sessions[0].resume && calls().length===beforeFresh)
+  await until("!document.querySelector('.restore-session-dialog') && !!document.querySelector('[data-new-kind=\"shell\"]:not(:disabled)')")
+  check('Start fresh shows choices without launching a terminal',await ev("!document.querySelector('.cell') && document.querySelectorAll('.new-session-choices > button').length===4") && saved().sessions.length===0 && calls().length===beforeFresh)
+  await ev("document.querySelector('[data-new-kind=\"shell\"]').click()")
+  await until("!document.querySelector('.new-session-dialog') && document.querySelectorAll('.cell').length===1")
+  await until("window.buddy.workspace.get().then(w => w.sessions.length===1)")
+  check('Explicit fresh terminal opens only a home terminal, with no agents',saved().sessions.length===1 && saved().sessions[0].cwd.toLowerCase()===testHome.toLowerCase() && !saved().sessions[0].resume && calls().length===beforeFresh)
   check('Start fresh clears reopen entries but preserves chat history files',saved().unrestoredSessions.length===0 && existsSync(claude) && existsSync(codex))
   await shutdown()
 

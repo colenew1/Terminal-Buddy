@@ -142,6 +142,11 @@ try {
     await sleep(500)
   }
   check('app boots past splash', booted)
+  for (let i = 0; i < 40; i++) {
+    if (await evaluate(`!!document.querySelector('[data-new-kind="shell"]:not(:disabled)')`)) break
+    await sleep(100)
+  }
+  await evaluate(`document.querySelector('[data-new-kind="shell"]').click()`)
 
   const shells = await evaluate(`window.buddy.shells.list().then(s => s.map(x => x.label))`)
   check('shells detected', Array.isArray(shells) && shells.length > 0, shells?.join(', '))

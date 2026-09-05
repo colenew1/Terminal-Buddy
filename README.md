@@ -27,7 +27,7 @@ It is a personal tool, published in case it's useful. No telemetry, no account, 
 
 ## One terminal, no transcript view
 
-The **+** button opens a chooser without creating a terminal. Start a new Claude chat, a new Codex chat, or a plain terminal; every fresh chooser defaults to your home directory (`C:\Users\Owner` on this PC). Choose a project folder first when needed. **Resume saved chat** opens the catalog directly, without leaving an unwanted terminal behind. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
+Fresh launches, new windows, **Start fresh** in recovery, and every **+** open a chooser without creating a terminal. Choose **Pick a chat** to browse saved conversations, **Start a new chat** to choose Claude or Codex, **Open folder…** to select the working folder, or **Just start fresh** to launch a plain terminal. Each fresh chooser starts in your home directory; selecting a folder updates it for the next chat or terminal. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
 
 Each instance shows the agent's native terminal output. Terminal Buddy enables truecolor for its child terminals, rather than inheriting a launcher's `NO_COLOR` setting. Colors come from the running program and the selected terminal theme; output is not rewritten into chat bubbles.
 
@@ -39,7 +39,7 @@ Saved chats remain in the catalog and can be resumed or exported as Markdown. Dr
 
 **Separate workspace windows**
 
-Click **⊞ New window** in the title bar, use **Ctrl+Shift+N** (**Cmd+Shift+N** on Mac), or choose **New workspace window** in the command palette. Each window starts with its own terminal and supports its own tabs, grid, names, and project folders. The arrow beside New window lists your workspaces and brings the selected window forward, including hidden windows. The tray menu also offers New window.
+Click **⊞ New window** in the title bar, use **Ctrl+Shift+N** (**Cmd+Shift+N** on Mac), or choose **New workspace window** in the command palette. Each new window opens the four-option chooser and supports its own terminals, tabs, grid, names, and project folders. The arrow beside New window lists your workspaces and brings the selected window forward, including hidden windows. The tray menu also offers New window.
 
 Terminal input, broadcast typing, activity, and pop-outs stay within their owning workspace. Preferences and the saved-chat catalog are shared. Closing one workspace stops only its terminals and closes its pop-outs; other windows keep running. If Close to tray is enabled, closing hides the workspace and keeps its terminals alive. Quit from the tray or Mac application menu to exit all windows.
 
@@ -299,14 +299,14 @@ What does work, and covers most of the need:
 
 ### Updating Codex inside Terminal Buddy
 
-Click **+ → Terminal only** to get a normal shell prompt. You can install and update command-line tools there. Close running Codex CLI sessions before updating, then open a new Codex chat afterwards. For an npm installation:
+Click **+ → Just start fresh** to get a normal shell prompt. You can install and update command-line tools there. Close running Codex CLI sessions before updating, then open a new Codex chat afterwards. For an npm installation:
 
 ```sh
 npm install -g @openai/codex@latest
 codex --version
 ```
 
-Use the update method matching your original installation; see the [official Codex CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli). This updates the CLI; the desktop app has its own updater. If Terminal Buddy cannot open even a **Terminal only** pane, use PowerShell/Windows Terminal or macOS Terminal to update. The chooser now keeps the actual launch error visible; check **Settings → Terminal → Default shell** if it points to a missing shell. A native terminal-module error requires a Terminal Buddy reinstall/build for the correct OS and processor, rather than a Codex update.
+Use the update method matching your original installation; see the [official Codex CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli). This updates the CLI; the desktop app has its own updater. If Terminal Buddy cannot open even a **Just start fresh** pane, use PowerShell/Windows Terminal or macOS Terminal to update. The chooser now keeps the actual launch error visible; check **Settings → Terminal → Default shell** if it points to a missing shell. A native terminal-module error requires a Terminal Buddy reinstall/build for the correct OS and processor, rather than a Codex update.
 
 ### Building for macOS
 

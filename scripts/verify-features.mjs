@@ -52,7 +52,7 @@ async function launch() {
   ws.onmessage = e => { const m = JSON.parse(e.data), p = pending.get(m.id); if (p) { clearTimeout(p.timer); pending.delete(m.id); m.error ? p.reject(Error(m.error.message)) : p.resolve(m.result) } else if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.text) }
   ws.onclose = () => { for (const p of pending.values()) { clearTimeout(p.timer); p.reject(Error('Window closed')) } pending.clear() }
   await send('Runtime.enable')
-  await until("!!document.querySelector('.walkthrough[open], .restore-session-dialog[open], .cell')")
+  await until("!!document.querySelector('.walkthrough[open], .restore-session-dialog[open], .new-session-dialog[open], .cell')")
 }
 async function shutdown() {
   if (child?.exitCode === null) {
@@ -74,6 +74,7 @@ try {
   await click('[data-tour-next]'); check('Next advances the walkthrough', await ev("document.querySelector('#walkthrough-title').textContent==='Start with the plus'"))
   await click('[data-tour-back]'); check('Back returns to the preceding step', await ev("document.querySelector('#walkthrough-title').textContent==='Meet your Terminal Buddy'"))
   await click('[data-tour-skip]'); await until("!document.querySelector('.walkthrough')")
+  check('finishing the tour shows four choices without launching a terminal', await ev("!!document.querySelector('.new-session-dialog[open]') && document.querySelectorAll('.new-session-choices > button').length===4 && !document.querySelector('.cell')"))
   check('Skip saves completion', await ev('window.buddy.settings.get().then(s=>s.walkthroughVersion===1)'))
   await shutdown(); await launch()
   check('restart does not repeat a skipped tour', await ev("!document.querySelector('.walkthrough')"))

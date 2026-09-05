@@ -49,7 +49,6 @@ export default function TerminalArea(): React.JSX.Element {
   const reduceMotion = useStore((s) => s.settings.reduceMotion)
   const setActive = useStore((s) => s.setActive)
   const closeSession = useStore((s) => s.closeSession)
-  const openSession = useStore((s) => s.openSession)
   const settingsOpen = useStore((s) => s.settingsOpen)
   const paletteOpen = useStore((s) => s.paletteOpen)
   const pendingCloseId = useStore((s) => s.pendingCloseId)
@@ -178,16 +177,13 @@ export default function TerminalArea(): React.JSX.Element {
         <div className="empty-card">
           <Buddy mood="asleep" size={72} title="Nothing to do" />
           <h2>Nothing open. I&rsquo;ll wait.</h2>
-          <p>Point me at a folder and I&rsquo;ll get a terminal going.</p>
+          <p>Pick a chat, start a new one, or open a fresh terminal.</p>
           <div className="empty-actions">
             <button
               className="btn primary"
-              onClick={async () => {
-                const dir = await window.buddy.app.pickFolder()
-                if (dir) void openSession({ cwd: dir })
-              }}
+              onClick={() => useStore.getState().setNewSessionOpen(true)}
             >
-              Open folder…
+              Open something…
             </button>
             <button className="btn" onClick={() => useStore.getState().setSidebar(true, 'chats')}>
               Pick up an old chat

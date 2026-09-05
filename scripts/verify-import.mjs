@@ -134,6 +134,9 @@ try {
     else if(m.method==='Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.text)
   }
   await send('Runtime.enable')
+  await until(`!!document.querySelector('[data-new-kind="shell"]:not(:disabled)')`)
+  check('fresh launch shows four choices without starting a terminal',await ev(`document.querySelectorAll('.new-session-choices > button').length===4 && !document.querySelector('.cell')`))
+  await ev(`document.querySelector('[data-new-kind="shell"]').click()`)
   await until(`!!document.querySelector('.xterm-helper-textarea')`)
   await ev(`window.__output={}; window.buddy.pty.onData((id,data)=>{window.__output[id]=(window.__output[id]??'')+data})`)
   await ev(`window.__feed={}; window.buddy.feed.onEvents((id,events)=>{window.__feed[id]=[...(window.__feed[id]??[]),...events]})`)
@@ -257,7 +260,7 @@ try {
   await until(`document.querySelector('[data-new-cwd]')?.textContent===${JSON.stringify(testHome)}`)
   check('plus opens a chooser without creating a terminal',await ev(`document.querySelectorAll('.cell').length===5 && !!document.querySelector('.new-session-dialog[open]')`))
   check('plus defaults to home, not the active imported project',await ev(`document.querySelector('.cell.is-active').dataset.sessionId===${JSON.stringify(importedId)} && document.querySelector('[data-new-cwd]').textContent===${JSON.stringify(testHome)}`))
-  check('chooser offers agents, shell, folder selection, and saved chats',await ev(`document.querySelectorAll('[data-new-kind]').length===3 && !!document.querySelector('[data-new-folder]') && !!document.querySelector('[data-new-resume]')`))
+  check('chooser offers new chat, shell, folder selection, and saved chats',await ev(`document.querySelectorAll('.new-session-choices > button').length===4 && !!document.querySelector('[data-new-chat]') && !!document.querySelector('[data-new-folder]') && !!document.querySelector('[data-new-resume]')`))
   const chooserShot=await send('Page.captureScreenshot',{format:'png'})
   writeFileSync(join(tmpdir(),'terminal-buddy-new-session.png'),Buffer.from(chooserShot.data,'base64'))
   await key('Escape',27)
@@ -274,6 +277,8 @@ try {
   await ev(`document.querySelector('[data-new-cancel]').click()`)
   for (const [index,agent] of ['claude','codex'].entries()) {
     await ev(`document.querySelector('.tab-new').click()`)
+    await until(`!!document.querySelector('[data-new-chat]')`)
+    await ev(`document.querySelector('[data-new-chat]').click()`)
     await until(`!!document.querySelector('[data-new-kind="${agent}"]:not(:disabled)')`)
     await ev(`(() => { const b=document.querySelector('[data-new-kind="${agent}"]'); b.click(); b.click() })()`)
     await until(`!document.querySelector('.new-session-dialog') && document.querySelectorAll('.cell').length===${6+index}`)

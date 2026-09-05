@@ -296,7 +296,7 @@ export default function App(): React.JSX.Element {
       {paletteOpen && <Palette />}
       {settingsOpen && <SettingsPanel />}
       <CloseSessionDialog />
-      {newSessionOpen && <NewSessionDialog />}
+      {newSessionOpen && !restoreItems && !walkthroughOpen && <NewSessionDialog />}
       {restoreItems && <RestoreSessionDialog items={restoreItems} />}
       {walkthroughOpen && !restoreItems && <Walkthrough />}
       {linkSessionId && <LinkSessionDialog sessionId={linkSessionId} />}

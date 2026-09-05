@@ -58,6 +58,9 @@ try {
     pending.delete(r.id); clearTimeout(p.timer)
     r.error ? p.reject(Error(r.error.message)) : p.resolve(r.result)
   }
+  await until("!!document.querySelector('[data-new-kind=\"shell\"]:not(:disabled)')")
+  assert.equal(await ev("document.querySelectorAll('.cell').length"), 0)
+  await ev("document.querySelector('[data-new-kind=\"shell\"]').click()")
   await until("!!document.querySelector('.xterm-helper-textarea')")
   assert.equal(await ev('window.buddy.platform'), process.platform)
   await ev("window.__platformOutput = ''; window.buddy.pty.onData((_id, data) => window.__platformOutput += data)")

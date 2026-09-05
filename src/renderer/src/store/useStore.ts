@@ -220,8 +220,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       return
     }
     if (get().sessions.length === 0) {
-      const paths = await window.buddy.app.paths()
-      await get().openSession({ cwd: paths.home })
+      set({ newSessionOpen: true })
     }
     set({ ready: true })
     get().persist()
@@ -591,13 +590,7 @@ export const useStore = create<State & Actions>((set, get) => ({
 
   async startFresh() {
     if (get().restoring || !get().restoreItems) return
-    set({ restoring: true })
-    try {
-      const paths = await window.buddy.app.paths()
-      const id = await get().openSession({ cwd: paths.home })
-      if (!id) return
-      set({ restoreItems: null, unrestoredSessions: [] })
-    } finally { set({ restoring: false }) }
+    set({ restoreItems: null, unrestoredSessions: [], newSessionOpen: true })
     get().persistNow()
   },
 

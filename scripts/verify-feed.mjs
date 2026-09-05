@@ -95,6 +95,7 @@ try {
     if (await ev(`!!document.querySelector('.app') && !document.querySelector('.boot')`)) break
     await sleep(500)
   }
+  await newTerminal()
   await sleep(2500)
 
   check('pane opens on the live terminal, not a transcript overlay', await ev(`!document.querySelector('.agent') && !!document.querySelector('.xterm')`))
