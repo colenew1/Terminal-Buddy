@@ -1482,3 +1482,116 @@ kbd {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
+
+/* ============================================ dropping catalog items in */
+
+.row.is-draggable {
+  cursor: grab;
+}
+
+.row.is-draggable:active {
+  cursor: grabbing;
+}
+
+/* While something is being dragged, quieten everything that cannot take it. */
+.area.is-item-drag .cell {
+  transition: opacity 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.area.is-item-drag .cell.cannot-drop {
+  opacity: 0.4;
+  filter: saturate(0.4);
+}
+
+.area.is-item-drag .cell.can-drop {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ok) 55%, transparent);
+}
+
+.cell.is-drop-target {
+  box-shadow:
+    inset 0 0 0 3px var(--accent),
+    0 10px 34px rgba(0, 0, 0, 0.4);
+  transform: scale(1.012);
+}
+
+.drop-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  background: var(--bg-3);
+  border: 1px solid var(--accent);
+  color: var(--fg);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 8;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cell.cannot-drop .drop-hint {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ================================================ moving and resizing panes */
+
+/* The pane you are holding lifts out of the grid in its own colour. */
+.cell.is-dragging {
+  opacity: 1;
+  transform: scale(1.03);
+  z-index: 7;
+  box-shadow:
+    inset 0 0 0 2px var(--critter, var(--accent)),
+    0 18px 44px rgba(0, 0, 0, 0.5);
+}
+
+.area.is-unlocked .cell:not(.is-dragging) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--critter, var(--accent)) 40%, transparent);
+}
+
+.cell-shield {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shield-size {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--fg-faint);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  pointer-events: none;
+}
+
+.cell-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 22px;
+  height: 22px;
+  z-index: 9;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 0 45%,
+    color-mix(in srgb, var(--warn) 70%, transparent) 45% 60%,
+    transparent 60% 72%,
+    color-mix(in srgb, var(--warn) 70%, transparent) 72% 87%,
+    transparent 87%
+  );
+  border-bottom-right-radius: var(--radius);
+}
+
+.cell-resize:hover {
+  background: linear-gradient(135deg, transparent 0 40%, var(--warn) 40%);
+}

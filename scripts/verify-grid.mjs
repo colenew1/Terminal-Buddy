@@ -3,6 +3,26 @@ import { spawn } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+
+/**
+ * Start from a clean workspace. Terminals, spans and layout all persist, so
+ * without this a previous run's saved state leaks into the next one's
+ * assertions - and the suite leaves the user's app full of stray panes.
+ */
+function resetWorkspace() {
+  const file = join(process.env.APPDATA ?? '', 'terminal-buddy', 'workspace.json')
+  if (!existsSync(file)) return
+  try {
+    const w = JSON.parse(readFileSync(file, 'utf8'))
+    writeFileSync(file, JSON.stringify({ ...w, sessions: [], layout: 'tabs' }, null, 2))
+  } catch {
+    /* a malformed file is the app's problem, not the harness's */
+  }
+}
+resetWorkspace()
+
 const PORT = 9224
 const OUT = process.argv[2] ?? 'grid.png'
 const WANT = 6
@@ -155,6 +175,75 @@ try {
   await sleep(500)
   const relocked = await ev(`document.querySelectorAll('.cell-shield').length`)
   check('locking removes the shields', relocked === 0, `${relocked} shields`)
+
+  // Agent probe: one entry per live session, even when nothing is running.
+  const probe = await ev(`window.buddy.pty.probeAgents().then(m => ({ keys: Object.keys(m).length, values: [...new Set(Object.values(m))] }))`)
+  check('agent probe answers for every pane', probe.keys === WANT, `${probe.keys} entries, values ${JSON.stringify(probe.values)}`)
+
+  // Dragging a skill from the catalog should light up only the panes that can
+  // take it. Nothing is running here, so every pane is a legal target.
+  await ev(`document.querySelectorAll('.topbar .icon-btn')[0].click()`)
+  await sleep(1500)
+  await ev(`[...document.querySelectorAll('.sidebar-head .seg button')].find(b => b.textContent.startsWith('Skills'))?.click()`)
+  await sleep(900)
+
+  // Dispatch and assert in separate turns: React batches state updates, so the
+  // DOM does not reflect them until after the current task.
+  const dispatched = await ev(`(() => {
+    const row = document.querySelector('.sidebar-body .row.is-draggable')
+    if (!row) return 'no draggable row'
+    window.__dt = new DataTransfer()
+    row.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: window.__dt }))
+    return document.body.classList.contains('is-dragging-item') ? 'started' : 'dragstart did not fire'
+  })()`)
+  check('sidebar row starts a drag', dispatched === 'started', String(dispatched))
+  await sleep(200)
+
+  await ev(`(() => {
+    const cell = document.querySelector('.cell')
+    cell.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: window.__dt }))
+    cell.dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer: window.__dt }))
+    return true
+  })()`)
+  await sleep(400)
+
+  const dragState = await ev(`({
+    areaFlagged: !!document.querySelector('.area.is-item-drag'),
+    canDrop: document.querySelectorAll('.cell.can-drop').length,
+    cannotDrop: document.querySelectorAll('.cell.cannot-drop').length,
+    target: !!document.querySelector('.cell.is-drop-target'),
+    hint: document.querySelector('.drop-hint')?.textContent ?? ''
+  })`)
+  check('dragging a skill marks the grid', dragState.areaFlagged === true, JSON.stringify(dragState))
+  check('idle panes accept the skill', dragState.canDrop === WANT && dragState.cannotDrop === 0,
+    `${dragState.canDrop} ok / ${dragState.cannotDrop} refused`)
+  check('hovered pane explains what will happen', /start|type/i.test(dragState.hint), dragState.hint)
+
+  await ev(`(() => { window.dispatchEvent(new Event('dragend')); return true })()`)
+  await sleep(300)
+  await ev(`document.querySelectorAll('.topbar .icon-btn')[0].click()`)
+  await sleep(700)
+
+  // Resizing: drag the corner handle right and down by one cell each.
+  await ev(`[...document.querySelectorAll('.topbar .icon-btn')].find(b => b.textContent === '🔒')?.click()`)
+  await sleep(700)
+  const handle = await ev(`(() => {
+    const h = document.querySelector('.cell-resize')
+    if (!h) return null
+    const r = h.getBoundingClientRect()
+    const cell = h.closest('.cell').getBoundingClientRect()
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), w: Math.round(cell.width), h: Math.round(cell.height) }
+  })()`)
+  if (handle) {
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: handle.x, y: handle.y, button: 'left', clickCount: 1, pointerType: 'mouse' })
+    await sleep(120)
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: handle.x + handle.w, y: handle.y + handle.h, button: 'left', buttons: 1, pointerType: 'mouse' })
+    await sleep(300)
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: handle.x + handle.w, y: handle.y + handle.h, button: 'left', clickCount: 1, pointerType: 'mouse' })
+    await sleep(600)
+  }
+  const size = await ev(`document.querySelector('.shield-size')?.textContent ?? ''`)
+  check('dragging the corner resizes a pane', size === '2×2', `1×1 -> ${size || 'unknown'}`)
 
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(OUT, Buffer.from(shot.data, 'base64'))

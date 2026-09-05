@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ChatEntry, ChatTranscript } from '@shared/types'
 import { useStore } from '../store/useStore'
 import { bytes, timeAgo } from '../lib/format'
-import { resumeChat, resumeCommandFor } from './Sidebar'
+import { resumeChat, resumeCommandFor } from '../lib/commands'
 
 interface Props {
   entry: ChatEntry

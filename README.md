@@ -35,6 +35,7 @@ It is a personal tool, published in case it's useful. There is no telemetry, no 
 - GPU-accelerated rendering, 5000 lines of scrollback per pane by default
 
 **Catalog** (`Ctrl+Shift+E`)
+- **Drag a chat or a skill straight onto a terminal.** Panes that can take it light up green, the rest dim out, and the one under the cursor tells you exactly what will happen.
 - **Chats** — every Claude Code and Codex session on disk, newest first, with the title, first prompt, folder, turn count and age. **Resume** launches a terminal in the original folder and runs the resume command for you. **Export .md** writes a clean Markdown transcript.
 - **Skills** — every `SKILL.md` from your Claude plugins, user folder and per-project `.claude/skills`, plus Codex prompts. Deduplicated across cached plugin versions.
 - **Projects** — every folder you've worked in, derived from your session history. One click opens a terminal there.
@@ -162,6 +163,7 @@ Three details worth knowing if you fork this:
 
 - **Hidden panes keep their full size.** In tab mode every pane is absolutely positioned at full size and only `visibility` changes. A `display:none` terminal measures as zero, so `fit()` would resize the pty to nonsense on every tab switch.
 - **The pid arrives late.** On Windows, ConPTY populates `pty.pid` asynchronously; reading it at spawn always returns `0`. The manager refreshes it when the first output lands and pushes the correction to the UI.
+- **The dev build had its own profile.** Running `electron out/main/index.js` doesn't pick up the package name, so Electron fell back to `Electron` and kept a separate settings file, workspace and catalog cache under `%APPDATA%\Electron`. `app.setName('terminal-buddy')` pins both to the same profile — otherwise what you test isn't what ships.
 - **`AppUserModelId` must match the installer's `appId`.** Without it Windows treats a pinned shortcut and the running window as two different apps, and the taskbar shows both.
 
 ## Editing the line you're typing
@@ -178,13 +180,36 @@ It deliberately does nothing in three cases:
 
 A click on an unfocused pane only focuses it. The next click positions.
 
+## Dragging things onto terminals
+
+Grab any row in the catalog and drop it on a pane. Buddy works out what is actually running in each terminal first — by walking the process tree under each shell, not by guessing from output — so the highlighting tells the truth:
+
+| Dropping | On an idle prompt | On a matching agent | On the other agent |
+| --- | --- | --- | --- |
+| **Chat** | ✅ resumes it there | ❌ already busy | ❌ already busy |
+| **Skill** | ✅ starts the agent with the skill | ✅ types `/name` into the session | ❌ wrong agent |
+
+Green ring means it will land, dim means it won't, and the pane under the cursor spells it out: *"Start claude here with /agent-development"*, or *"That terminal is running codex, not claude"*.
+
+Resuming has to shell out, which is why it needs a prompt rather than a live agent — that's the case you described as "if it's not empty, you just have to open it normally", and the invalid drop says so instead of failing silently.
+
+The launch templates live in **Settings → Resume commands**, next to the resume ones:
+
+```
+claude "{skill}"      # {skill} becomes /name
+codex "{skill}"
+```
+
 ## Rearranging panes
 
 The grid is locked by default, because a stray drag while you are working should never shuffle six running agents. Click the **padlock** in the title bar (or `Ctrl+Shift+L`) and:
 
 - a shield drops over every pane — terminals keep producing output but stop taking input, so a drag can't be mistaken for a text selection
 - each pane grows a grab pill showing its critter and title
-- drag one pane onto another and **they swap places**; the order persists across restarts
+- drag a pane over another and the rest **slide out of the way** as you go, the way app icons do — the reorder happens live, not on drop
+- **drag the bottom-right corner** to make a pane span more columns or rows, up to 4×4; the layout persists across restarts
+
+Movement is animated with a FLIP pass: every pane's position is measured before and after the reflow, then each one starts at its old spot and glides to the new one. Without it a reorder teleports and it's genuinely hard to see what went where. Calm mode turns it off.
 
 Tabs are different: you can drag a tab to reorder it whenever you like, lock or no lock, because there is no way to do that by accident while typing.
 

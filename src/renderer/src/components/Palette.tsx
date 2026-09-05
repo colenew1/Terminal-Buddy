@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { fuzzy, shortPath, timeAgo } from '../lib/format'
-import { resumeChat } from './Sidebar'
+import { resumeChat } from '../lib/commands'
 
 interface Item {
   key: string

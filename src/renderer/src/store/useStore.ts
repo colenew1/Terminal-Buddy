@@ -6,7 +6,8 @@ import {
   type ScanProgress,
   type SessionSpec,
   type Settings,
-  type ShellDef
+  type ShellDef,
+  type Span
 } from '@shared/types'
 import { pickCritter, CRITTERS, type Critter } from '../lib/critters'
 import { applyTheme } from '../lib/themes'
@@ -26,6 +27,8 @@ export interface Session {
   attention: boolean
   unseen: boolean
   critter: Critter
+  /** Grid footprint in cells. Only meaningful in grid view. */
+  span: Span
 }
 
 export type SidebarTab = 'chats' | 'skills' | 'projects'
@@ -46,6 +49,8 @@ interface State {
   broadcast: boolean
   /** Locked means panes take input; unlocked means you can drag them around. */
   locked: boolean
+  /** Which panes are running an agent right now, refreshed on demand. */
+  agents: Record<string, 'claude' | 'codex' | null>
 
   catalog: Catalog | null
   catalogLoading: boolean
@@ -65,6 +70,8 @@ interface Actions {
   setLocked: (v: boolean) => void
   swapSessions: (a: string, b: string) => void
   moveSession: (from: number, to: number) => void
+  setSpan: (id: string, span: Span) => void
+  refreshAgents: () => Promise<void>
   setLayout: (m: LayoutMode) => void
   markData: (id: string) => void
   markExit: (id: string, code: number) => void
@@ -101,6 +108,7 @@ export const useStore = create<State & Actions>((set, get) => ({
   broadcast: false,
   // Always starts locked: a stray drag mid-session should never rearrange work.
   locked: true,
+  agents: {},
 
   catalog: null,
   catalogLoading: false,
@@ -130,7 +138,13 @@ export const useStore = create<State & Actions>((set, get) => ({
 
     if (settings.restoreOnLaunch && workspace.sessions.length) {
       for (const s of workspace.sessions) {
-        await get().openSession({ cwd: s.cwd, shellId: s.shellId, title: s.title, critter: s.critter })
+        await get().openSession({
+          cwd: s.cwd,
+          shellId: s.shellId,
+          title: s.title,
+          critter: s.critter,
+          span: s.span
+        })
       }
     }
     if (get().sessions.length === 0) {
@@ -156,6 +170,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       const session: Session = {
         ...info,
         critter,
+        span: spec.span ?? { cols: 1, rows: 1 },
         status: 'running',
         lastDataAt: 0,
         busy: false,
@@ -231,6 +246,23 @@ export const useStore = create<State & Actions>((set, get) => ({
       return { sessions: next }
     })
     get().persist()
+  },
+
+  setSpan(id, span) {
+    const cols = Math.max(1, Math.min(4, Math.round(span.cols)))
+    const rows = Math.max(1, Math.min(4, Math.round(span.rows)))
+    set((s) => ({
+      sessions: s.sessions.map((x) => (x.id === id ? { ...x, span: { cols, rows } } : x))
+    }))
+    get().persist()
+  },
+
+  async refreshAgents() {
+    try {
+      set({ agents: await window.buddy.pty.probeAgents() })
+    } catch {
+      /* leaving the map empty just means "unknown", which the UI allows */
+    }
   },
 
   moveSession(from, to) {
@@ -342,7 +374,13 @@ export const useStore = create<State & Actions>((set, get) => ({
       void window.buddy.workspace.set({
         sessions: sessions
           .filter((s) => s.status === 'running')
-          .map((s) => ({ cwd: s.cwd, shellId: s.shellId, title: s.title, critter: s.critter.name })),
+          .map((s) => ({
+            cwd: s.cwd,
+            shellId: s.shellId,
+            title: s.title,
+            critter: s.critter.name,
+            span: s.span
+          })),
         layout
       })
     }, 400)

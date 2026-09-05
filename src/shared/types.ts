@@ -11,6 +11,12 @@ export interface ShellDef {
   args: string[]
 }
 
+/** How many grid cells a pane occupies. */
+export interface Span {
+  cols: number
+  rows: number
+}
+
 /** What the renderer asks for when opening a terminal. */
 export interface SessionSpec {
   cwd: string
@@ -20,6 +26,8 @@ export interface SessionSpec {
   initialCommand?: string
   /** Renderer-only: restore a specific critter instead of picking a fresh one. */
   critter?: string
+  /** Renderer-only: restore a saved grid footprint. */
+  span?: Span
 }
 
 /** What main returns once the pty is alive. */
@@ -121,6 +129,9 @@ export interface Settings {
   /** `{id}` is replaced with the session id. Templates so a CLI change is a settings edit. */
   claudeResumeCommand: string
   codexResumeCommand: string
+  /** `{skill}` becomes `/name`. Used when a skill is dropped on an idle pane. */
+  claudeSkillCommand: string
+  codexSkillCommand: string
   /** Extra folders to scan for project-level `.claude/skills`. */
   extraSkillRoots: string[]
   /** Palette id from lib/themes.ts. */
@@ -154,6 +165,8 @@ export const DEFAULT_SETTINGS: Settings = {
   copyOnSelect: false,
   claudeResumeCommand: 'claude --resume {id}',
   codexResumeCommand: 'codex resume {id}',
+  claudeSkillCommand: 'claude "{skill}"',
+  codexSkillCommand: 'codex "{skill}"',
   extraSkillRoots: [],
   theme: 'midnight',
   critters: true,
@@ -169,6 +182,7 @@ export interface PersistedSession {
   cwd: string
   shellId: string
   title: string
+  span?: Span
   /** Restored so a pane keeps its critter across launches. */
   critter?: string
 }

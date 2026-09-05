@@ -4,28 +4,14 @@ import { useStore, type SidebarTab } from '../store/useStore'
 import { bytes, fuzzy, shortPath, timeAgo } from '../lib/format'
 import { scanLine } from '../lib/copy'
 import ChatDetail from './ChatDetail'
+import { DRAG_MIME, setDragItem, type DragItem } from '../lib/dnd'
+import { resumeChat } from '../lib/commands'
 
 const TABS: { id: SidebarTab; label: string }[] = [
   { id: 'chats', label: 'Chats' },
   { id: 'skills', label: 'Skills' },
   { id: 'projects', label: 'Projects' }
 ]
-
-export function resumeCommandFor(entry: ChatEntry): string {
-  const { settings } = useStore.getState()
-  const template = entry.agent === 'claude' ? settings.claudeResumeCommand : settings.codexResumeCommand
-  return template.replace('{id}', entry.id)
-}
-
-export async function resumeChat(entry: ChatEntry): Promise<void> {
-  const { openSession, notify } = useStore.getState()
-  if (!entry.cwd) notify('That chat has no recorded folder — opening in your home directory.')
-  await openSession({
-    cwd: entry.cwd,
-    title: entry.title.slice(0, 28),
-    initialCommand: resumeCommandFor(entry)
-  })
-}
 
 export default function Sidebar(): React.JSX.Element {
   const tab = useStore((s) => s.sidebarTab)
@@ -87,6 +73,23 @@ export default function Sidebar(): React.JSX.Element {
   }, [catalog, q])
 
   const hiddenCount = (catalog?.chats ?? []).filter((c) => c.internal).length
+
+  /** Rows are draggable onto terminals; see lib/dnd.ts for the rules. */
+  const dragProps = (item: DragItem): React.HTMLAttributes<HTMLDivElement> & { draggable: true } => ({
+    draggable: true,
+    onDragStart: (e) => {
+      setDragItem(item)
+      e.dataTransfer.effectAllowed = 'copy'
+      e.dataTransfer.setData(DRAG_MIME, item.kind)
+      // Knowing what is running in each pane is what lets targets light up.
+      void useStore.getState().refreshAgents()
+      document.body.classList.add('is-dragging-item')
+    },
+    onDragEnd: () => {
+      setDragItem(null)
+      document.body.classList.remove('is-dragging-item')
+    }
+  })
 
   return (
     <aside className="sidebar" style={{ width }}>
@@ -151,7 +154,13 @@ export default function Sidebar(): React.JSX.Element {
 
         {tab === 'chats' &&
           chats.map((c) => (
-            <div key={`${c.agent}:${c.path}`} className="row" onClick={() => setDetail(c)}>
+            <div
+              key={`${c.agent}:${c.path}`}
+              className="row is-draggable"
+              onClick={() => setDetail(c)}
+              title="Drag me onto an idle terminal to resume here"
+              {...dragProps({ kind: 'chat', entry: c })}
+            >
               <div className="row-main">
                 <span className={`badge ${c.agent}`}>{c.agent}</span>
                 <span className="row-title">{c.title}</span>
@@ -189,7 +198,13 @@ export default function Sidebar(): React.JSX.Element {
 
         {tab === 'skills' &&
           skills.map((s) => (
-            <div key={s.id} className="row" onClick={() => setSkillDetail(s)}>
+            <div
+              key={s.id}
+              className="row is-draggable"
+              onClick={() => setSkillDetail(s)}
+              title={`Drag me onto a ${s.agent} terminal`}
+              {...dragProps({ kind: 'skill', entry: s })}
+            >
               <div className="row-main">
                 <span className={`badge ${s.agent}`}>{s.agent}</span>
                 <span className="row-title">{s.name}</span>

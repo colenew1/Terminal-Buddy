@@ -16,6 +16,7 @@ import { PtyManager } from './pty'
 import { CatalogService, buildMarkdown } from './catalog'
 import { loadSettings, saveSettings, loadWorkspace, saveWorkspace, cacheFile } from './store'
 import { TrayController, setTaskbarBadge, setJumpList } from './tray'
+import { probeAgents } from './agents'
 import {
   installCli,
   installContextMenu,
@@ -23,6 +24,15 @@ import {
   uninstallCli,
   uninstallContextMenu
 } from './shell-integration'
+
+/*
+ * Running `electron out/main/index.js` in development does not pick up the
+ * package name, so Electron falls back to "Electron" and the dev build ends up
+ * with its own settings, workspace and catalog cache under %APPDATA%\Electron.
+ * Pinning the name makes dev and the installed build share one profile, so what
+ * you test is what ships.
+ */
+app.setName('terminal-buddy')
 
 const shells = detectShells()
 const ptys = new PtyManager(shells)
@@ -177,6 +187,15 @@ function registerIpc(): void {
   ipcMain.on('pty:write', (_e, id: string, data: string) => ptys.write(id, data))
   ipcMain.on('pty:resize', (_e, id: string, cols: number, rows: number) => ptys.resize(id, cols, rows))
   ipcMain.on('pty:kill', (_e, id: string) => ptys.kill(id))
+
+  // Which panes are currently running an agent, keyed by session id.
+  ipcMain.handle('pty:probeAgents', async () => {
+    const live = ptys.list()
+    const byPid = await probeAgents(live.map((s) => s.pid))
+    const out: Record<string, string | null> = {}
+    for (const s of live) out[s.id] = byPid[s.pid] ?? null
+    return out
+  })
 
   ipcMain.handle('settings:get', () => loadSettings())
   ipcMain.handle('settings:set', (_e, s: Settings) => {

@@ -6,6 +6,26 @@ import { spawn } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+
+/**
+ * Start from a clean workspace. Terminals, spans and layout all persist, so
+ * without this a previous run's saved state leaks into the next one's
+ * assertions - and the suite leaves the user's app full of stray panes.
+ */
+function resetWorkspace() {
+  const file = join(process.env.APPDATA ?? '', 'terminal-buddy', 'workspace.json')
+  if (!existsSync(file)) return
+  try {
+    const w = JSON.parse(readFileSync(file, 'utf8'))
+    writeFileSync(file, JSON.stringify({ ...w, sessions: [], layout: 'tabs' }, null, 2))
+  } catch {
+    /* a malformed file is the app's problem, not the harness's */
+  }
+}
+resetWorkspace()
+
 const PORT = 9222
 const OUT = process.argv[2] ?? 'smoke.png'
 

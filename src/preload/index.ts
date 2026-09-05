@@ -33,7 +33,9 @@ const api = {
     kill: (id: string): void => ipcRenderer.send('pty:kill', id),
     onData: (cb: (id: string, data: string) => void): Unsub => on('pty:data', cb),
     onExit: (cb: (id: string, code: number) => void): Unsub => on('pty:exit', cb),
-    onInfo: (cb: (id: string, patch: { pid: number }) => void): Unsub => on('pty:info', cb)
+    onInfo: (cb: (id: string, patch: { pid: number }) => void): Unsub => on('pty:info', cb),
+    probeAgents: (): Promise<Record<string, 'claude' | 'codex' | null>> =>
+      ipcRenderer.invoke('pty:probeAgents')
   },
 
   catalog: {

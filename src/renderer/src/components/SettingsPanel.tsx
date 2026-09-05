@@ -238,6 +238,26 @@ export default function SettingsPanel(): React.JSX.Element {
                 onChange={(e) => void setSettings({ codexResumeCommand: e.target.value })}
               />
             </label>
+
+            <p className="muted">
+              And when a skill is dropped on a terminal sitting at a prompt, <code>{'{skill}'}</code> becomes{' '}
+              <code>/name</code>. Dropping onto a terminal that is already running the agent just types the
+              slash command instead.
+            </p>
+            <label className="field">
+              <span>Claude skill</span>
+              <input
+                value={settings.claudeSkillCommand}
+                onChange={(e) => void setSettings({ claudeSkillCommand: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span>Codex skill</span>
+              <input
+                value={settings.codexSkillCommand}
+                onChange={(e) => void setSettings({ codexSkillCommand: e.target.value })}
+              />
+            </label>
           </section>
 
           <section>
