@@ -16,7 +16,7 @@ export function connectWindowTransfers(): () => void {
         attention: session.attention, unseen: session.unseen, busy: session.busy, lastDataAt: session.lastDataAt,
         agent: s.agents[session.id] ?? null, feeds: s.feeds[session.id] ?? [] })),
       workspace: { sessions: s.sessions.map(x => ({ cwd: x.cwd, shellId: x.shellId, title: x.title,
-        resume: x.resume, agent: x.resume?.agent ?? s.agents[x.id] ?? undefined, critter: x.critter.name, span: x.span, pos: x.pos })),
+        assistantId: x.assistantId, assistantName: x.assistantName, resume: x.resume, agent: x.resume?.agent ?? s.agents[x.id] ?? undefined, critter: x.critter.name, span: x.span, pos: x.pos })),
         layout: s.layout, gridSizes: s.gridSizes, activeIndex: Math.max(0, s.sessions.findIndex(x => x.id === s.activeId)),
         unrestoredSessions: s.unrestoredSessions }
     }

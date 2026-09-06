@@ -287,13 +287,14 @@ export default function TerminalArea(): React.JSX.Element {
                 </span>
                 <span className="cell-index">{i + 1}</span>
                 <SessionName session={s} />
+                {s.assistantId && <span className="badge" data-custom-assistant={s.assistantId}>{s.assistantName ?? 'Custom assistant'}</span>}
                 {agents[s.id] && <span className={`badge ${agents[s.id]}`}>{agents[s.id]}</span>}
                 <span className="cell-path">{shortPath(s.cwd, 2)}</span>
                 {s.attention && <span className="dot attention" title="Output paused — check the terminal prompt" />}
                 <TerminalStatus session={s} />
-                <button className="icon-btn tiny recovery-link" data-link-session={s.id}
+                {!s.assistantId && <button className="icon-btn tiny recovery-link" data-link-session={s.id}
                   title={s.resume ? `Recovery linked to ${s.resume.agent} ${s.resume.id}. Click to review.` : 'Link a saved chat for recovery. Plain terminals reopen their folder only.'}
-                  onClick={() => useStore.setState({ linkSessionId: s.id })}>{s.resume ? 'Linked' : 'Link chat'}</button>
+                  onClick={() => useStore.setState({ linkSessionId: s.id })}>{s.resume ? 'Linked' : 'Link chat'}</button>}
                 {!s.detached && <button className="icon-btn tiny" data-focus-session={s.id}
                   title={focused ? 'Return to layout (Escape)' : 'Focus terminal (double-click header)'}
                   onClick={() => toggleFocus(s.id)}>{focused ? '↙' : '⛶'}</button>}

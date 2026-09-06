@@ -12,7 +12,8 @@ function validChat(c: ChatEntry): boolean {
 }
 function validPreset(p: Omit<WorkspacePreset, 'id'>): boolean {
   return !!p && text(p.name, 80) && ['tabs', 'grid'].includes(p.layout) && Array.isArray(p.sessions) && p.sessions.length > 0 && p.sessions.length <= 16 &&
-    p.sessions.every(s => s && text(s.cwd) && isAbsolute(s.cwd) && text(s.shellId, 100) && text(s.title, 100) && (!s.agent || ['claude', 'codex'].includes(s.agent))) &&
+    p.sessions.every(s => s && text(s.cwd) && isAbsolute(s.cwd) && text(s.shellId, 100) && text(s.title, 100) && (!s.agent || ['claude', 'codex'].includes(s.agent)) &&
+      (!s.assistantId || (text(s.assistantId, 36) && /^[0-9a-f-]{36}$/.test(s.assistantId) && !s.agent))) &&
     (!p.gridSizes || ['columns', 'rows'].every(axis => {
       const weights = p.gridSizes![axis as 'columns' | 'rows']
       return Array.isArray(weights) && weights.length <= 16 && weights.every(w => Number.isFinite(w) && w > 0)
@@ -58,7 +59,7 @@ export function registerLauncherLibrary(allowed: (sender: WebContents) => void, 
     if (!validPreset(preset)) throw Error('Give the preset a name and open at least one terminal first.')
     if (library.presets.length >= 20) throw Error('Remove a preset first (20 maximum).')
     const clean: WorkspacePreset = { id: randomUUID(), name: preset.name.trim(), layout: preset.layout, gridSizes: preset.gridSizes,
-      sessions: preset.sessions.map(s => ({ cwd: s.cwd, shellId: s.shellId, title: s.title, agent: s.agent, critter: s.critter })) }
+      sessions: preset.sessions.map(s => ({ cwd: s.cwd, shellId: s.shellId, title: s.title, agent: s.agent, critter: s.critter, assistantId: s.assistantId, assistantName: s.assistantName })) }
     return save({ ...library, presets: [...library.presets, clean] })
   })
   ipcMain.handle('library:deletePreset', (event, id: string) => {

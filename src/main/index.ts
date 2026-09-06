@@ -15,6 +15,7 @@ import type {
   Settings,
   Workspace
 } from '@shared/types'
+import { validAssistantProfile, type AssistantProfile } from '@shared/types'
 import { detectShells } from './shells'
 import { PtyManager } from './pty'
 import { CatalogService, buildMarkdown } from './catalog'
@@ -283,6 +284,12 @@ function registerIpc(): void {
     const workspace = workspaceFor(e.sender)
     if (transfers.isLocked(workspace.id)) throw Error('A terminal move is finishing. Try again shortly.')
     if ([...sessionOwners.values()].filter(id => id === workspace.id).length >= 16) throw Error('16 terminals is the cap — close one first.')
+    if (spec.assistantId) {
+      if (spec.agent || spec.resume || spec.transcript) throw Error('Custom assistants manage their history inside their own CLI.')
+      const profile = loadSettings().customAssistants.find(p => p.id === spec.assistantId)
+      if (!profile) throw Error('This assistant is no longer configured. Add or choose an assistant in Settings.')
+      spec = { ...spec, assistantName: profile.name, initialCommand: profile.command }
+    }
     const session = ptys.create(spec)
     sessionOwners.set(session.id, workspace.id)
     return session
@@ -323,6 +330,7 @@ function registerIpc(): void {
     if (!ownsSession(e.sender, id)) throw Error('Link chats from the terminal’s workspace.')
     const current = ptys.describe(id)?.session
     if (!current) throw Error('This terminal has closed.')
+    if (current.assistantId) throw Error('Custom assistants manage saved chats inside their own CLI.')
     const resume = { agent: chat.agent, id: chat.id, path: chat.path }
     await validate({ ...current, cwd: chat.cwd, resume })
     // Only recovery metadata changes. Never write to, restart, or replace the PTY.
@@ -333,14 +341,14 @@ function registerIpc(): void {
   ipcMain.handle('pty:probeAgents', async (e) => {
     const workspace = workspaceFor(e.sender)
     const live = ptys.list().filter(session => sessionOwners.get(session.id) === workspace.id)
-    const byPid = await probeAgents(live.map((s) => s.pid))
+    const byPid = await probeAgents(live.filter(s => !s.assistantId).map((s) => s.pid))
     const out: Record<string, string | null> = {}
-    for (const s of live) out[s.id] = byPid[s.pid] ?? null
+    for (const s of live) out[s.id] = s.assistantId ? null : byPid[s.pid] ?? null
     return out
   })
 
   ipcMain.handle('settings:get', () => loadSettings())
-  ipcMain.handle('settings:set', (_e, s: Settings) => {
+  const updateSettings = (s: Settings): Settings => {
     saveSettings(s)
     alertsEnabled = s.desktopNotifications
     if (!alertsEnabled) {
@@ -353,10 +361,24 @@ function registerIpc(): void {
     sendToRenderer('settings:changed', s)
     tray?.enable(s.trayIcon)
     return s
+  }
+  ipcMain.handle('settings:set', (_e, s: Settings) => updateSettings(s))
+  ipcMain.handle('assistants:save', (event, profile: AssistantProfile) => {
+    workspaceFor(event.sender)
+    if (!validAssistantProfile(profile)) throw Error('Enter a name (up to 60 characters) and a single-line launch command (up to 2000 characters).')
+    const settings = loadSettings()
+    const others = settings.customAssistants.filter(p => p.id !== profile.id)
+    if (others.length >= 16) throw Error('Remove an assistant first (16 custom assistants maximum).')
+    return updateSettings({ ...settings, customAssistants: [...others, { id: profile.id, name: profile.name.trim(), command: profile.command.trim() }] })
+  })
+  ipcMain.handle('assistants:remove', (event, id: string) => {
+    workspaceFor(event.sender)
+    const settings = loadSettings()
+    return updateSettings({ ...settings, customAssistants: settings.customAssistants.filter(p => p.id !== id) })
   })
 
   ipcMain.handle('workspace:get', (e) => loadWorkspace(workspaceFor(e.sender).id))
-  ipcMain.handle('workspace:prepareRestore', (_e, sessions: PersistedSession[]) => prepareRestore(sessions))
+  ipcMain.handle('workspace:prepareRestore', (_e, sessions: PersistedSession[]) => prepareRestore(sessions, loadSettings()))
   ipcMain.handle('workspace:restoreSpec', (_e, session: PersistedSession) => restoreSpec(session, loadSettings()))
   ipcMain.on('workspace:saveSync', (event, w: Workspace) => {
     try {
@@ -457,7 +479,7 @@ function registerIpc(): void {
     (sessionId, events) => sendToSession(sessionId, 'feed:events', sessionId, events),
     (sessionId, agent) => sendToSession(sessionId, 'feed:agent', sessionId, agent)
   )
-  ipcMain.on('feed:attach', (e, sessionId: string, cwd: string, source?: FeedSource) => { if (ownsSession(e.sender, sessionId)) feeds?.attach(sessionId, cwd, source) })
+  ipcMain.on('feed:attach', (e, sessionId: string, cwd: string, source?: FeedSource) => { if (ownsSession(e.sender, sessionId) && !ptys.describe(sessionId)?.session.assistantId) feeds?.attach(sessionId, cwd, source) })
   ipcMain.on('feed:detach', (e, sessionId: string) => { if (ownsSession(e.sender, sessionId)) feeds?.detach(sessionId) })
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())

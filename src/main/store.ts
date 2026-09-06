@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { DEFAULT_SETTINGS, type Settings, type Workspace } from '@shared/types'
+import { DEFAULT_SETTINGS, validAssistantProfile, type Settings, type Workspace } from '@shared/types'
 
 function readJson<T>(file: string, fallback: T): T {
   try {
@@ -29,6 +29,8 @@ const workspaceFile = (id = 'primary'): string => {
 
 export function loadSettings(): Settings {
   const settings = readJson<Settings>(settingsFile(), { ...DEFAULT_SETTINGS, alertsOptInVersion: 0 })
+  settings.customAssistants = Array.isArray(settings.customAssistants)
+    ? settings.customAssistants.filter(validAssistantProfile).filter((p, i, all) => all.findIndex(other => other.id === p.id) === i).slice(0, 16) : []
   // Previous versions enabled notifications without consent. Move everyone to
   // an explicit opt-in once; subsequent choices (including chimes) are retained.
   if (settings.alertsOptInVersion < 1) {
@@ -40,6 +42,7 @@ export function loadSettings(): Settings {
 }
 
 export function saveSettings(s: Settings): void {
+  if (!Array.isArray(s.customAssistants) || s.customAssistants.length > 16 || !s.customAssistants.every(validAssistantProfile) || new Set(s.customAssistants.map(p => p.id)).size !== s.customAssistants.length) throw Error('Assistant profiles need a unique ID, a name, and a single-line launch command.')
   writeJson(settingsFile(), s)
 }
 

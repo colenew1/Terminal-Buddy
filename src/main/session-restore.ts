@@ -5,8 +5,13 @@ import type { PersistedSession, RestoreItem, SessionSpec, Settings } from '@shar
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Validate the recorded file itself; never substitute the newest chat in a folder. */
-export async function validate(session: PersistedSession): Promise<void> {
+export async function validate(session: PersistedSession, settings?: Settings): Promise<void> {
   if (!session || typeof session.cwd !== 'string' || !(await stat(session.cwd)).isDirectory()) throw Error('The project folder is unavailable.')
+  if (session.assistantId) {
+    if (session.agent || session.resume) throw Error('Custom assistants manage their own saved history.')
+    if (!settings?.customAssistants?.some(p => p.id === session.assistantId)) throw Error('This custom assistant is no longer configured. Choose a new chat from +.')
+    return
+  }
   const ref = session.resume
   if (!ref) {
     if (session.agent) throw Error('This chat was not linked to an exact session ID. Select it from Saved chats.')
@@ -36,11 +41,11 @@ export async function validate(session: PersistedSession): Promise<void> {
   if (!ids.has(ref.id)) throw Error('The saved file does not match this chat ID, or has no saved history yet.')
 }
 
-export async function prepareRestore(sessions: PersistedSession[]): Promise<RestoreItem[]> {
+export async function prepareRestore(sessions: PersistedSession[], settings?: Settings): Promise<RestoreItem[]> {
   return Promise.all(sessions.map(async (session,index) => {
     try {
-      await validate(session)
-      return { index, session, available: true, description: session.resume ? `Resume ${session.resume.agent} conversation` : 'Reopen terminal folder only' }
+      await validate(session, settings)
+      return { index, session, available: true, description: session.assistantId ? `Start a fresh ${settings?.customAssistants.find(p => p.id === session.assistantId)?.name ?? 'custom assistant'} session (history stays in the CLI)` : session.resume ? `Resume ${session.resume.agent} conversation` : 'Reopen terminal folder only' }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
       const description = code === 'ENOENT' ? 'The saved folder or chat file is missing.' : code === 'EACCES' || code === 'EPERM' ? 'The saved folder or chat file cannot be read.' : (error as Error).message
@@ -50,9 +55,9 @@ export async function prepareRestore(sessions: PersistedSession[]): Promise<Rest
 }
 
 export async function restoreSpec(session: PersistedSession, settings: Settings): Promise<SessionSpec> {
-  await validate(session) // Files may have changed since the chooser opened.
+  await validate(session, settings) // Files may have changed since the chooser opened.
   const { resume, cwd, shellId, title, critter, span, pos } = session
-  const spec: SessionSpec = { cwd, shellId, title, critter, span, pos, requireCwd: true }
+  const spec: SessionSpec = { cwd, shellId, title, critter, span, pos, requireCwd: true, assistantId: session.assistantId, assistantName: session.assistantName }
   if (resume) {
     const template = resume.agent === 'claude' ? settings.claudeResumeCommand : settings.codexResumeCommand
     if (!template.includes('{id}')) throw Error('The resume command in Settings must include {id}.')

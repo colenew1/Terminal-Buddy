@@ -30,6 +30,12 @@ try {
   pass('explicit opt-in and tour completion survive subsequent launches', () => {
     const s = store.loadSettings(); assert.equal(s.desktopNotifications, true); assert.equal(s.chime, true); assert.equal(s.walkthroughVersion, 1)
   })
+  pass('legacy settings start with no custom assistants', () => assert.equal(store.loadSettings().customAssistants.length, 0))
+  const custom = { id: '11111111-1111-4111-8111-111111111111', name: 'Kimi', command: 'kimi' }
+  store.saveSettings({ ...store.loadSettings(), customAssistants: [custom] })
+  pass('custom assistant names and commands persist', () => assert.equal(store.loadSettings().customAssistants[0].command, 'kimi'))
+  writeFileSync(join(profile, 'settings.json'), JSON.stringify({ ...store.loadSettings(), customAssistants: [custom, custom, { id: 'broken', name: '', command: '' }] }))
+  pass('malformed or duplicate profiles cannot break settings startup', () => { const s = store.loadSettings(); assert.equal(s.customAssistants.length, 1); assert.equal(s.fontSize, 17) })
   const a = { sessions: [{ cwd: profile, shellId: 'cmd', title: 'Previous' }], layout: 'grid', gridSizes: { columns: [.3, .7], rows: [1] } }
   store.saveWorkspace(a); store.saveWorkspace({ ...a, sessions: [{ ...a.sessions[0], title: 'Current' }] })
   pass('latest valid workspace is used normally', () => assert.equal(store.loadWorkspace().sessions[0].title, 'Current'))

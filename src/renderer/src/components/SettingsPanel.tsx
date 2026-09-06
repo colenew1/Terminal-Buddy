@@ -5,6 +5,7 @@ import { IS_MAC, SHORTCUT_HELP } from '../lib/shortcuts'
 import { THEMES } from '../lib/themes'
 import { CRITTER_PACKS, packById } from '../lib/critters'
 import Buddy from './Buddy'
+import AssistantSettings from './AssistantSettings'
 
 export default function SettingsPanel(): React.JSX.Element {
   const settings = useStore((s) => s.settings)
@@ -58,6 +59,7 @@ export default function SettingsPanel(): React.JSX.Element {
             <p className="muted">A short, click-through tour of terminals, layouts, pop-outs, recovery, and optional alerts.</p>
             <button className="btn" data-replay-tour onClick={() => useStore.setState({ settingsOpen: false, walkthroughOpen: true })}>Replay walkthrough</button>
           </section>
+          <AssistantSettings />
           <section>
             <h4>Terminal</h4>
             <label className="field">

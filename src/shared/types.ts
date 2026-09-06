@@ -3,6 +3,17 @@
 export type LayoutMode = 'tabs' | 'grid'
 export type Agent = 'claude' | 'codex'
 
+/** User-configured CLI launcher. Built-in history parsers remain agent-specific. */
+export interface AssistantProfile { id: string; name: string; command: string }
+
+export function validAssistantProfile(value: unknown): value is AssistantProfile {
+  if (!value || typeof value !== 'object') return false
+  const p = value as AssistantProfile
+  return typeof p.id === 'string' && /^[0-9a-f-]{36}$/.test(p.id) &&
+    typeof p.name === 'string' && p.name.trim().length > 0 && p.name.length <= 60 &&
+    typeof p.command === 'string' && p.command.trim().length > 0 && p.command.length <= 2000 && !/[\r\n\x00]/.test(p.command)
+}
+
 /** Explicit conversation identity. Never inferred from a folder's newest file. */
 export interface ResumeRef { agent: Agent; id: string; path: string }
 
@@ -50,6 +61,8 @@ export interface Span {
 /** What the renderer asks for when opening a terminal. */
 export interface SessionSpec {
   cwd: string
+  assistantId?: string
+  assistantName?: string
   shellId?: string
   title?: string
   /** Typed into the shell once it is ready (used by "resume this chat"). */
@@ -69,6 +82,8 @@ export interface SessionSpec {
 /** What main returns once the pty is alive. */
 export interface SessionInfo {
   id: string
+  assistantId?: string
+  assistantName?: string
   cwd: string
   shellId: string
   shellLabel: string
@@ -164,6 +179,7 @@ export interface ChatTranscript {
 }
 
 export interface Settings {
+  customAssistants: AssistantProfile[]
   defaultShellId: string
   fontSize: number
   fontFamily: string
@@ -209,6 +225,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  customAssistants: [],
   defaultShellId: 'pwsh',
   fontSize: 13,
   fontFamily: '"Cascadia Mono", "JetBrains Mono", Menlo, Monaco, Consolas, "Courier New", monospace',
@@ -240,6 +257,8 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export interface PersistedSession {
   cwd: string
+  assistantId?: string
+  assistantName?: string
   shellId: string
   title: string
   resume?: ResumeRef
@@ -320,7 +339,7 @@ export interface WorkspacePreset {
   layout: LayoutMode
   gridSizes?: Workspace['gridSizes']
   /** Fresh assistants and shells only, never saved input or arbitrary commands. */
-  sessions: Pick<PersistedSession, 'cwd' | 'shellId' | 'title' | 'agent' | 'critter'>[]
+  sessions: Pick<PersistedSession, 'cwd' | 'shellId' | 'title' | 'agent' | 'critter' | 'assistantId' | 'assistantName'>[]
 }
 
 export interface LauncherLibrary {

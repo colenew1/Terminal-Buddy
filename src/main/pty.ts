@@ -136,6 +136,7 @@ export class PtyManager {
       id,
       cwd,
       shellId: shell.id,
+      assistantId: spec.assistantId, assistantName: spec.assistantName,
       shellLabel: shell.label,
       title: spec.title || basename(cwd),
       pid: pty.pid,

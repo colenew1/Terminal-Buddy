@@ -16,6 +16,8 @@ import { pickCritter, findCritter, type Critter } from '../lib/critters'
 import { applyTheme } from '../lib/themes'
 
 export interface Session {
+  assistantId?: string
+  assistantName?: string
   id: string
   cwd: string
   title: string
@@ -264,14 +266,14 @@ export const useStore = create<State & Actions>((set, get) => ({
         busy: false,
         attention: false,
         unseen: false,
-        hasInput: !!spec.initialCommand, hasConversation: !!spec.transcript, replacing: false,
+        hasInput: !!spec.initialCommand || !!info.assistantId, hasConversation: !!spec.transcript, replacing: false,
         resume: info.resume ?? spec.resume
       }
       set((s) => ({ sessions: [...s.sessions, session], activeId: info.id,
         unrestoredSessions: s.unrestoredSessions.filter((old) => !session.resume || old.resume?.id !== session.resume.id || old.resume?.agent !== session.resume.agent),
         agents: { ...s.agents, [info.id]: spec.agent ?? spec.transcript?.agent ?? null } }))
       void window.buddy.library.rememberFolder(info.cwd).catch(() => {})
-      window.buddy.feed.attach(info.id, info.cwd, session.resume ? { agent: session.resume.agent, path: session.resume.path } : spec.transcript)
+      if (!info.assistantId) window.buddy.feed.attach(info.id, info.cwd, session.resume ? { agent: session.resume.agent, path: session.resume.path } : spec.transcript)
       get().persist()
       set({ failedSpec: null })
       return info.id
@@ -302,7 +304,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       const replacement: Session = {
         ...info, critter: current.critter, span: current.span, pos: current.pos,
         status: 'running', lastDataAt: 0, busy: false, attention: false, unseen: false,
-        hasInput: !!spec.initialCommand,
+        hasInput: !!spec.initialCommand || !!info.assistantId,
         hasConversation: !!spec.transcript, replacing: false,
         resume: info.resume ?? spec.resume
       }
@@ -316,7 +318,7 @@ export const useStore = create<State & Actions>((set, get) => ({
           activeId: info.id, feeds, toolStats,
           agents: { ...agents, [info.id]: spec.agent ?? spec.transcript?.agent ?? null } }
       })
-      window.buddy.feed.attach(info.id, info.cwd, replacement.resume ? { agent: replacement.resume.agent, path: replacement.resume.path } : spec.transcript)
+      if (!info.assistantId) window.buddy.feed.attach(info.id, info.cwd, replacement.resume ? { agent: replacement.resume.agent, path: replacement.resume.path } : spec.transcript)
       get().persist()
       return info.id
     } catch (e) {
@@ -465,7 +467,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       // A process scan can race a launch or replacement. It must not erase the
       // conversation identity supplied by an import or resurrect closed IDs.
       set((s) => ({ agents: Object.fromEntries(s.sessions.map((session) => [
-        session.id, probed[session.id] ?? s.agents[session.id] ?? null
+        session.id, session.assistantId ? null : probed[session.id] ?? s.agents[session.id] ?? null
       ])) }))
     } catch {
       /* leaving the map empty just means "unknown", which the UI allows */
@@ -524,10 +526,10 @@ export const useStore = create<State & Actions>((set, get) => ({
       if (!s.busy || s.status !== 'running') return s
       if (now - s.lastDataAt < settings.attentionDelayMs) return s
       changed = true
-      // A plain shell also emits output and then goes quiet. Only a pane that
-      // has produced an agent transcript should ever claim it needs the user.
+      // A plain shell also emits output and then goes quiet. Flag only an
+      // identified built-in agent or an explicitly launched custom assistant.
       // Latch until an explicit look/input. Further output cannot dismiss it.
-      return { ...s, busy: false, attention: s.attention || (s.unseen && !!get().agents[s.id]) }
+      return { ...s, busy: false, attention: s.attention || (s.unseen && (!!s.assistantId || !!get().agents[s.id])) }
     })
     if (changed) set({ sessions: next })
   },
@@ -626,7 +628,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     const live = state.sessions
     const workspace: Workspace = {
       sessions: live.map((s) => ({ cwd: s.cwd, shellId: s.shellId, title: s.title, critter: s.critter.name,
-        span: s.span, pos: s.pos, resume: s.resume, agent: s.resume?.agent ?? state.agents[s.id] ?? undefined })),
+        span: s.span, pos: s.pos, assistantId: s.assistantId, assistantName: s.assistantName, resume: s.resume, agent: s.resume?.agent ?? state.agents[s.id] ?? undefined })),
       layout: state.layout, gridSizes: state.gridSizes,
       activeIndex: Math.max(0, live.findIndex((s) => s.id === state.activeId)),
       unrestoredSessions: state.unrestoredSessions

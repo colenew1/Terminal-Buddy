@@ -6,6 +6,7 @@ import { useStore } from '../store/useStore'
 
 /** Choosing is side-effect free: no terminal exists until a launch is selected. */
 export default function NewSessionDialog(): React.JSX.Element {
+  const profiles = useStore(s => s.settings.customAssistants)
   const library = useStore(s => s.library)
   const catalog = useStore(s => s.catalog)
   const dialog = useRef<HTMLDialogElement>(null)
@@ -40,16 +41,18 @@ export default function NewSessionDialog(): React.JSX.Element {
     } finally { inFlight.current = false; setBusy(false) }
   }
 
-  const launch = async (kind: 'claude' | 'codex' | 'shell'): Promise<void> => {
+  const launch = async (kind: string): Promise<void> => {
     if (!cwd || inFlight.current) return
+    const profile = useStore.getState().settings.customAssistants.find(p => p.id === kind)
+    if (!['claude', 'codex', 'shell'].includes(kind) && !profile) { setError('This assistant was removed. Choose another assistant or add it in Settings.'); return }
     inFlight.current = true
     setBusy(true)
     setError('')
     const store = useStore.getState()
     const id = await store.openSession({
       cwd, requireCwd: true,
-      ...(kind === 'shell' ? {} : {
-        agent: kind, initialCommand: kind,
+      ...(profile ? { assistantId: profile.id, title: `New ${profile.name} chat` } : kind === 'shell' ? {} : {
+        agent: kind as 'claude' | 'codex', initialCommand: kind,
         title: kind === 'claude' ? 'New Claude chat' : 'New Codex chat'
       })
     })
@@ -91,6 +94,10 @@ export default function NewSessionDialog(): React.JSX.Element {
           <button className="btn" data-new-kind="codex" disabled={busy || !cwd} onClick={() => void launch('codex')}>
             <strong>New Codex chat</strong><span>Fresh conversation in this folder</span>
           </button>
+          {profiles.map(profile => <button className="btn" key={profile.id} data-new-kind={profile.id} disabled={busy || !cwd} onClick={() => void launch(profile.id)}>
+            <strong>New {profile.name} chat</strong><span>Fresh session in this folder</span>
+          </button>)}
+          <button className="btn" data-manage-assistants disabled={busy} onClick={() => { close(); useStore.getState().setSettingsOpen(true); requestAnimationFrame(() => document.querySelector('#assistant-settings')?.scrollIntoView()) }}>Add or edit assistants…</button>
         </> : <>
           <button className="btn" data-new-resume disabled={busy} onClick={() => {
             useStore.getState().setSidebar(true, 'chats')
@@ -100,7 +107,7 @@ export default function NewSessionDialog(): React.JSX.Element {
             <strong>Pick a chat</strong><span>Continue a saved conversation</span>
           </button>
           <button className="btn" data-new-chat disabled={busy} onClick={() => setChoosingAgent(true)}>
-            <strong>Start a new chat</strong><span>Choose Claude or Codex</span>
+            <strong>Start a new chat</strong><span>{profiles.length ? 'Choose Claude, Codex, or a custom assistant' : 'Choose Claude or Codex'}</span>
           </button>
           <button className="btn" data-new-folder disabled={busy} onClick={() => void chooseFolder()}>
             <strong>Open folder…</strong><span>Choose the folder for your new chat or terminal</span>

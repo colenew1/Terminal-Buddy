@@ -14,7 +14,7 @@ import type {
   Settings,
   ShellDef,
   Workspace,
-  PopoutInit, Pos, TransferState, TransferArrival, LauncherLibrary, WorkspacePreset
+  AssistantProfile, PopoutInit, Pos, TransferState, TransferArrival, LauncherLibrary, WorkspacePreset
 } from '@shared/types'
 
 type Unsub = () => void
@@ -69,6 +69,11 @@ const api = {
     refresh: (): Promise<Catalog> => ipcRenderer.invoke('catalog:refresh'),
     exportMarkdown: (entry: ChatEntry): Promise<OpResult> => ipcRenderer.invoke('catalog:export', entry),
     onProgress: (cb: (p: ScanProgress) => void): Unsub => on('catalog:progress', cb)
+  },
+
+  assistants: {
+    save: (profile: AssistantProfile): Promise<Settings> => ipcRenderer.invoke('assistants:save', profile),
+    remove: (id: string): Promise<Settings> => ipcRenderer.invoke('assistants:remove', id)
   },
 
   settings: {

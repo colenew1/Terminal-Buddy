@@ -18,7 +18,7 @@ export default function PresetsDialog(): React.JSX.Element {
     try {
       const s = useStore.getState()
       await window.buddy.library.savePreset({ name: name.trim(), layout: s.layout, gridSizes: s.gridSizes,
-        sessions: s.sessions.map(x => ({ cwd: x.cwd, shellId: x.shellId, title: x.title, critter: x.critter.name,
+        sessions: s.sessions.map(x => ({ cwd: x.cwd, shellId: x.shellId, title: x.title, critter: x.critter.name, assistantId: x.assistantId, assistantName: x.assistantName,
           agent: x.resume?.agent ?? s.agents[x.id] ?? undefined })) })
       setName('')
     } catch (e) { setError((e as Error).message) }
