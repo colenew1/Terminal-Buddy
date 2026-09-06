@@ -113,7 +113,7 @@ export default function NewSessionDialog(): React.JSX.Element {
             <strong>Open folder…</strong><span>Choose the folder for your new chat or terminal</span>
           </button>
           <button className="btn" data-new-kind="shell" disabled={busy || !cwd} onClick={() => void launch('shell')}>
-            <strong>Just start fresh</strong><span>Open a plain terminal for commands or tool updates</span>
+            <strong>Start a base terminal</strong><span>Open a plain terminal for commands or tool updates</span>
           </button>
         </>}
       </div>

@@ -394,6 +394,7 @@ html[data-platform='darwin'] .topbar {
   background: var(--bg-2);
   border: 1px solid transparent;
   cursor: pointer;
+  width: 210px;
   max-width: 210px;
   min-width: 0;
   flex: none;
@@ -422,6 +423,8 @@ html[data-platform='darwin'] .topbar {
 }
 
 .tab-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -434,6 +437,8 @@ html[data-platform='darwin'] .topbar {
 }
 
 .tab-rename {
+  flex: 1;
+  min-width: 0;
   background: var(--bg);
   border: 1px solid var(--accent);
   color: var(--fg);
@@ -574,6 +579,20 @@ html[data-platform='darwin'] .topbar {
 .pane.is-exited {
   opacity: 0.75;
 }
+
+.file-drop-hint, .file-drop-actions {
+  position: absolute;
+  z-index: 12;
+  inset: auto 16px 16px;
+  padding: 16px;
+  background: var(--bg-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px #0005;
+}
+.file-drop-hint { pointer-events: none; }
+.file-drop-actions code { display: block; margin: 10px 0; overflow: auto; max-height: 120px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.file-drop-actions > div { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .pane-host {
   position: absolute;
@@ -1656,7 +1675,7 @@ kbd {
   flex-direction: column;
 }
 
-.terminal-status { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 7px; border-radius: 5px; font-size: 10px; color: var(--ok); background: color-mix(in srgb, var(--ok) 9%, var(--bg)); }
+.terminal-status { flex: none; width: 102px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; padding: 3px 7px; border-radius: 5px; font-size: 10px; color: var(--ok); background: color-mix(in srgb, var(--ok) 9%, var(--bg)); }
 .terminal-status i { width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
 .terminal-status.is-active, .terminal-status.is-sending { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 .terminal-status.is-attention { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--bg)); }

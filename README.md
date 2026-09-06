@@ -27,7 +27,7 @@ It is a personal tool, published in case it's useful. No telemetry, no account, 
 
 ## One terminal, no transcript view
 
-Fresh launches, new windows, **Start fresh** in recovery, and every **+** open a chooser without creating a terminal. Choose **Pick a chat** to browse saved conversations, **Start a new chat** to choose Claude, Codex, or a configured assistant, **Open folder…** to select the working folder, or **Just start fresh** to launch a plain terminal. Expand **Recent folders, pinned chats & presets** for shortcuts. Pin or unpin conversations in the catalog with **☆ Pin**; pinned chats validate their saved history before reopening. Favorites and recent folders are shared across windows and saved for the next launch. Each fresh chooser starts in your home directory; selecting a folder updates it for the next chat or terminal. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
+Fresh launches, new windows, **Open something else…** in recovery, and every **+** open a chooser without creating a terminal. Choose **Pick a chat** to browse saved conversations, **Start a new chat** to choose Claude, Codex, or a configured assistant, **Open folder…** to select the working folder, or **Start a base terminal** to launch a plain terminal. Expand **Recent folders, pinned chats & presets** for shortcuts. Pin or unpin conversations in the catalog with **☆ Pin**; pinned chats validate their saved history before reopening. Favorites and recent folders are shared across windows and saved for the next launch. Each fresh chooser starts in your home directory; selecting a folder updates it for the next chat or terminal. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
 
 Each instance shows the agent's native terminal output. Terminal Buddy enables truecolor for its child terminals, rather than inheriting a launcher's `NO_COLOR` setting. Colors come from the running program and the selected terminal theme; output is not rewritten into chat bubbles.
 
@@ -65,7 +65,7 @@ Closing a pop-out (including Ctrl+Shift+W) docks it instead of stopping its proc
 
 **Pick up where you left off**
 
-After exiting the entire app, the next launch asks whether to reopen all available sessions, choose individual ones, browse saved chats, or start fresh. Names, folders, ordering, active pane, grid proportions are saved continuously and flushed on normal exit. Closing the app while the chooser is open keeps the previous recovery snapshot. Start fresh clears the reopen list, never the agents' conversation history.
+After exiting the entire app, the next launch asks whether to reopen all available sessions, choose individual ones, browse saved chats, or start fresh. Names, folders, ordering, active pane, grid proportions are saved continuously and flushed on normal exit. Closing the app while the chooser is open keeps the previous recovery snapshot. Open something else clears the reopen list and offers a base terminal, folder, or new chat; saved conversation history stays available.
 
 Chats imported from the catalog record their exact Claude/Codex session ID. New Claude chats launched by the chooser receive an explicit ID and become resumable once Claude writes their history. Missing folders/files and known agents without a linked ID are flagged, not silently replaced with another chat. For new Codex chats or agents started manually, click **Link chat** in the terminal header and choose the exact saved conversation. Buddy validates its ID against the history file without restarting the live process. **Linked** reviews or changes that association. Changing conversations inside a CLI (for example `/resume` or `/clear`) does not automatically update the link; select the new conversation with this control. Workspace writes are atomic, with a last-known-good `.bak` fallback for corrupt or invalid snapshots.
 
@@ -198,9 +198,9 @@ Nothing is guessed; both CLIs write structured logs.
 | Title | `ai-title` records, else first real prompt | first real user message |
 | Folder | `cwd` on user records | `session_meta.payload.cwd` |
 
-Both stores are large — around 300 MB here — so every file is parsed once and cached against its size and mtime. The first scan takes a few seconds with a progress bar; later launches are instant. Parsing streams line by line and only runs `JSON.parse` on lines that could possibly match, so a 20 MB transcript costs a read, not a heap.
+Both stores are large — around 300 MB here — so every file is parsed once and cached against its size and mtime. The first scan takes a few seconds with a progress bar; later launches reuse unchanged entries. The catalog rescans on each workspace launch, when the app regains focus, and when the catalog is reopened. Chats appear most recently used first, using timestamps recorded in the conversation (file modification time is the fallback). Custom `CODEX_HOME` and `CLAUDE_CONFIG_DIR` locations and Codex archived sessions are included. Parsing streams line by line and only runs `JSON.parse` on lines that could possibly match, so a 20 MB transcript costs a read, not a heap.
 
-Sessions whose only prompts are machinery (sub-agent runs, `/exit`, injected `AGENTS.md` or caveat blocks) are flagged **internal** and hidden behind a toggle — but a session Claude gave a real title is always kept, even if it opens with a caveat block.
+Sessions whose only prompts are machinery (sub-agent runs, `/exit`, injected `AGENTS.md` or caveat blocks) are flagged **internal** and included by default; use the internal toggle to hide them — but a session Claude gave a real title is always kept, even if it opens with a caveat block.
 
 The resume commands are **templates** in Settings:
 
@@ -250,6 +250,8 @@ It deliberately does nothing in three cases:
 A click on an unfocused pane only focuses it. The next click positions.
 
 ## Dragging things onto terminals
+
+Drop local files from Explorer or Finder onto a terminal, including a pop-out, then choose **Copy as Path** for quoted, absolute paths on the plain-text clipboard. Previous image clipboard data is cleared, including when the dropped file is an image. **Paste path** inserts those paths into the terminal without pressing Enter. Multiple files and paths with spaces are supported.
 
 Grab any row in the catalog and drop it on a pane. Buddy works out what is actually running in each terminal first — by walking the process tree under each shell, not by guessing from output — so the highlighting tells the truth:
 
@@ -309,14 +311,14 @@ What does work, and covers most of the need:
 
 ### Updating Codex inside Terminal Buddy
 
-Click **+ → Just start fresh** to get a normal shell prompt. You can install and update command-line tools there. Close running Codex CLI sessions before updating, then open a new Codex chat afterwards. For an npm installation:
+Click **+ → Start a base terminal** to get a normal shell prompt. You can install and update command-line tools there. Close running Codex CLI sessions before updating, then open a new Codex chat afterwards. For an npm installation:
 
 ```sh
 npm install -g @openai/codex@latest
 codex --version
 ```
 
-Use the update method matching your original installation; see the [official Codex CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli). This updates the CLI; the desktop app has its own updater. If Terminal Buddy cannot open even a **Just start fresh** pane, use PowerShell/Windows Terminal or macOS Terminal to update. Launch errors offer **Retry**, **Choose another shell**, and **Copy error details**. Selecting another shell applies to that retry. The chooser keeps the actual launch error visible; check **Settings → Terminal → Default shell** if it points to a missing shell. A native terminal-module error requires a Terminal Buddy reinstall/build for the correct OS and processor, rather than a Codex update.
+Use the update method matching your original installation; see the [official Codex CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli). This updates the CLI; the desktop app has its own updater. If Terminal Buddy cannot open even a **Start a base terminal** pane, use PowerShell/Windows Terminal or macOS Terminal to update. Launch errors offer **Retry**, **Choose another shell**, and **Copy error details**. Selecting another shell applies to that retry. The chooser keeps the actual launch error visible; check **Settings → Terminal → Default shell** if it points to a missing shell. A native terminal-module error requires a Terminal Buddy reinstall/build for the correct OS and processor, rather than a Codex update.
 
 ### Building for macOS
 

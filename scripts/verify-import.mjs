@@ -63,7 +63,8 @@ utimesSync(claudeFile, new Date(old), new Date(old)); utimesSync(codexFile, new 
 const port = 9238
 const child = spawn(process.env.BUDDY_EXE ?? 'node_modules/electron/dist/electron.exe', [
   ...(process.env.BUDDY_EXE ? [] : ['./out/main/index.js']), `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`
-], { stdio:'ignore', env:{...process.env, PATH:bin+';'+process.env.PATH, HOME:testHome, USERPROFILE:testHome} })
+], { windowsHide: true, stdio:'ignore', env:{...process.env, PATH:bin+';'+process.env.PATH, HOME:testHome, USERPROFILE:testHome,
+  CODEX_HOME: join(testHome, '.codex'), CLAUDE_CONFIG_DIR: join(testHome, '.claude')} })
 let ws, failures = 0, serial = 0
 const pending = new Map(), errors = []
 const check = (label, ok, detail='') => { if (!ok) failures++; console.log(`${ok?'PASS':'FAIL'} ${label}${detail ? ' — '+detail : ''}`) }
@@ -136,8 +137,32 @@ try {
   await send('Runtime.enable')
   await until(`!!document.querySelector('[data-new-kind="shell"]:not(:disabled)')`)
   check('fresh launch shows four choices without starting a terminal',await ev(`document.querySelectorAll('.new-session-choices > button').length===4 && !document.querySelector('.cell')`))
+  check('startup explicitly offers a base terminal',await ev(`document.querySelector('[data-new-kind="shell"]').textContent.includes('Start a base terminal')`))
   await ev(`document.querySelector('[data-new-kind="shell"]').click()`)
   await until(`!!document.querySelector('.xterm-helper-textarea')`)
+  const droppedFile = join(project, 'file with spaces.png')
+  writeFileSync(droppedFile, readFileSync('resources/icon.png'))
+  await send('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] })
+  await ev(`navigator.clipboard.write([new ClipboardItem({'image/png':new Blob([Uint8Array.from(atob(${JSON.stringify(readFileSync(droppedFile).toString('base64'))}),c=>c.charCodeAt(0))],{type:'image/png'})})])`)
+  check('clipboard fixture starts as an image', await ev(`navigator.clipboard.read().then(items=>items.some(item=>item.types.includes('image/png')))`))
+  const dropFiles = async () => {
+    const point = await ev(`(() => { const r=document.querySelector('.cell.is-active .pane-host').getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2} })()`)
+    for (const type of ['dragEnter','dragOver','drop']) await send('Input.dispatchDragEvent', {type,...point,data:{items:[],files:[droppedFile],dragOperationsMask:1}})
+    await until(`!!document.querySelector('[data-copy-path]')`)
+  }
+  await dropFiles()
+  check('native file drop resolves an absolute disk path through the preload bridge',await ev(`document.querySelector('.file-drop-actions code').textContent===${JSON.stringify(droppedFile)}`))
+  await ev(`document.querySelector('[data-copy-path]').click()`)
+  await until(`!document.querySelector('[data-copy-path]')`)
+  check('Copy as Path writes quoted plain text, including image filenames and spaces',await ev(`window.buddy.clipboard.read().then(text=>text===${JSON.stringify('"'+droppedFile+'"')})`))
+  check('Copy as Path removes the previous clipboard image',await ev(`navigator.clipboard.read().then(items=>items.some(item=>item.types.includes('text/plain'))&&!items.some(item=>item.types.includes('image/png')))`))
+  const width = await ev(`document.querySelector('.tab').getBoundingClientRect().width`)
+  await ev(`document.querySelector('.tab').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))`)
+  await until(`!!document.querySelector('.tab-rename')`)
+  await ev(`const input=document.querySelector('.tab-rename'); input.value='A much longer terminal title while output is active'; input.dispatchEvent(new FocusEvent('focusout',{bubbles:true}))`)
+  await sleep(100)
+  check('tab width stays fixed when its content changes',await ev(`document.querySelector('.tab').getBoundingClientRect().width===${width}`))
+  await ev(`document.querySelector('.cell.is-active .xterm-helper-textarea').focus()`)
   await ev(`window.__output={}; window.buddy.pty.onData((id,data)=>{window.__output[id]=(window.__output[id]??'')+data})`)
   await ev(`window.__feed={}; window.buddy.feed.onEvents((id,events)=>{window.__feed[id]=[...(window.__feed[id]??[]),...events]})`)
   const legacy = await ev(`window.buddy.pty.create({cwd:${JSON.stringify(project)},shellId:'cmd',initialCommand:${JSON.stringify(mockCommand)}})`)
@@ -154,6 +179,10 @@ try {
   await button('Grid')
   await ev(`document.querySelector('.topbar button[title^="Catalog"]')?.click()`)
   await until(`document.querySelectorAll('.sidebar .row').length===2`)
+  writeFileSync(join(claudeDir, '33333333-3333-4333-8333-333333333333.jsonl'), JSON.stringify({type:'user',timestamp:'2026-09-06T00:00:00Z',cwd:project,message:{content:'Automatically discovered chat'}})+'\n')
+  await ev(`window.dispatchEvent(new Event('focus'))`)
+  await until(`document.querySelector('.sidebar .row-title')?.textContent==='Automatically discovered chat'`)
+  check('returning to the app rescans and puts the most recently used chat first',true)
   const before=await ev(`document.querySelector('.cell.is-active').dataset.sessionId`)
   const originalHistory = readFileSync(claudeFile,'utf8')
   await drop('Imported Claude history')
@@ -222,6 +251,14 @@ try {
   check('paste does not append Enter',await ev(`!window.__output[${JSON.stringify(importedId)}].includes('REPLY:pasted words')`))
   await key('Enter',13)
   await until(`window.__output[${JSON.stringify(importedId)}]?.includes('REPLY:pasted words')`)
+  await dropFiles()
+  await ev(`document.querySelector('[data-paste-path]').click()`)
+  await sleep(200)
+  const pathReply = 'REPLY:"' + droppedFile + '"'
+  check('Paste path does not submit automatically', await ev(`!window.__output[${JSON.stringify(importedId)}].includes(${JSON.stringify(pathReply)})`))
+  await key('Enter',13)
+  await until(`window.__output[${JSON.stringify(importedId)}]?.includes(${JSON.stringify(pathReply)})`)
+  check('Paste path reaches the native agent intact and submits only on Enter', true)
   check('pasted text submits once with native Enter',true)
   await drop('Imported Codex history'); await sleep(300)
   check('occupied terminal cannot be overwritten',await ev(`document.querySelector('.cell.is-active').dataset.sessionId===${JSON.stringify(importedId)}`))
@@ -270,7 +307,7 @@ try {
   await until(`!!document.querySelector('[data-new-resume]')`)
   await ev(`document.querySelector('[data-new-resume]').click()`)
   await until(`!document.querySelector('.new-session-dialog') && !!document.activeElement.closest('.sidebar')`)
-  check('resume opens saved chats directly without a spare terminal',await ev(`document.querySelectorAll('.cell').length===5 && document.querySelectorAll('.sidebar .row').length===2`))
+  check('resume opens saved chats directly without a spare terminal',await ev(`document.querySelectorAll('.cell').length===5 && document.querySelectorAll('.sidebar .row').length===3`))
   await key('t',84,10)
   await until(`!!document.querySelector('.new-session-dialog[open]')`)
   check('new-terminal keyboard shortcut uses the same chooser',await ev(`document.querySelectorAll('.cell').length===5`))

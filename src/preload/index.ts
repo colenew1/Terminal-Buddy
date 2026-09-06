@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   Catalog,
   ChatEntry,
@@ -126,8 +126,9 @@ const api = {
   },
 
   clipboard: {
+    filePath: (file: File): string => webUtils.getPathForFile(file),
     read: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
-    write: (text: string): void => ipcRenderer.send('clipboard:write', text)
+    write: (text: string): Promise<void> => ipcRenderer.invoke('clipboard:write', text)
   },
 
   app: {

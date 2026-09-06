@@ -483,7 +483,13 @@ function registerIpc(): void {
   ipcMain.on('feed:detach', (e, sessionId: string) => { if (ownsSession(e.sender, sessionId)) feeds?.detach(sessionId) })
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())
-  ipcMain.on('clipboard:write', (_e, text: string) => clipboard.writeText(text))
+  ipcMain.handle('clipboard:write', async (_e, text: string) => {
+    // Dictation and file managers can leave image/file formats on the clipboard.
+    // A copy from Buddy is always an unambiguous plain-text replacement.
+    if (typeof text !== 'string') return
+    clipboard.clear()
+    await clipboard.writeText(text)
+  })
 
   ipcMain.on('app:openExternal', (_e, url: string) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(() => undefined)

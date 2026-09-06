@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import FileDropTarget from './FileDropTarget'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
@@ -23,7 +24,6 @@ interface Props {
 export default function TerminalPane({ session, visible, interactive }: Props): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const id = session.id
-
   // Read live values from the store inside callbacks rather than closing over
   // them, so the terminal never has to be rebuilt when settings change.
   const settings = useStore((s) => s.settings)
@@ -205,7 +205,11 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
       onMouseDown={() => useStore.getState().locked && setActive(id)}
       onContextMenu={onContextMenu}
     >
-      <div className="pane-host" ref={hostRef} />
+      <FileDropTarget enabled={interactive} canPaste={session.status !== 'exited'}
+        focus={() => getTerm(id)?.term.focus()}
+        paste={text => { setActive(id); getTerm(id)?.term.paste(text) }}>
+        <div className="pane-host" ref={hostRef} />
+      </FileDropTarget>
       {session.status === 'exited' && (
         <div className="pane-exit">
           <span>

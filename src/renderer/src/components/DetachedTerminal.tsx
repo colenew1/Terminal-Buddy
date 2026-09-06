@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import FileDropTarget from './FileDropTarget'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -93,12 +94,15 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
         </div>
         <button className="btn" data-dock-back onClick={() => window.buddy.popout.dock(id)}>Dock back ↙</button>
       </header>
+      <FileDropTarget enabled={true} canPaste={status.startsWith('Live terminal')}
+        focus={() => terminal.current?.focus()} paste={text => terminal.current?.paste(text)}>
       <div className="detached-host" ref={host} onContextMenu={(event) => {
         event.preventDefault()
         const term = terminal.current
         if (term?.hasSelection()) { window.buddy.clipboard.write(term.getSelection()); term.clearSelection() }
         else void window.buddy.clipboard.read().then((text) => { if (text) terminal.current?.paste(text) })
       }} />
+      </FileDropTarget>
       <footer className="detached-status">{error || status}<span>Closing this window docks it back.</span></footer>
     </div>
   )

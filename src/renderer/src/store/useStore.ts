@@ -229,7 +229,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       try { restoreItems = await window.buddy.workspace.prepareRestore(previous) }
       catch { restoreItems = previous.map((session, index) => ({ session, index, available: false, description: 'Could not check this saved session. Try Saved chats.' })) }
       set({ ready: true, restoreItems, restoreActiveIndex: workspace.activeIndex ?? 0 })
-      void get().loadCatalog()
+      void get().loadCatalog(true)
       return
     }
     if (get().sessions.length === 0) {
@@ -237,7 +237,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     }
     set({ ready: true })
     get().persist()
-    void get().loadCatalog()
+    void get().loadCatalog(true)
   },
 
   async openSession(spec) {
@@ -542,7 +542,9 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
 
   setSidebar(open, tab) {
+    const wasOpen = get().sidebarOpen
     set((s) => ({ sidebarOpen: open, sidebarTab: tab ?? s.sidebarTab }))
+    if (open && !wasOpen) void get().loadCatalog(true)
   },
   setSidebarWidth(w) {
     set({ sidebarWidth: Math.min(720, Math.max(260, w)) })

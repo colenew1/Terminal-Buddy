@@ -16,8 +16,8 @@ import type {
 } from '@shared/types'
 
 const HOME = homedir()
-const CLAUDE_DIR = join(HOME, '.claude')
-const CODEX_DIR = join(HOME, '.codex')
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(HOME, '.claude')
+const CODEX_DIR = process.env.CODEX_HOME || join(HOME, '.codex')
 
 /** Prompts that are machinery, not something a human typed. */
 const INJECTED = [
@@ -239,30 +239,24 @@ async function parseClaudeChat(path: string, bytes: number, mtime: number): Prom
   let anyUser = ''
   let cwd = ''
   let startedAt = 0
+  let updatedAt = 0
   let turns = 0
 
   const rl = createInterface({ input: createReadStream(path, { encoding: 'utf8' }), crlfDelay: Infinity })
   try {
     for await (const line of rl) {
       if (line.length < 12) continue
-      // Titles are regenerated as the session grows; the last one is current.
-      if (line.includes('"ai-title"')) {
-        try {
-          const d = JSON.parse(line)
-          if (d.type === 'ai-title' && typeof d.aiTitle === 'string') title = d.aiTitle
-        } catch {
-          /* ignore malformed line */
-        }
-        continue
-      }
-      if (!hasType(line, 'user')) continue
-      turns++
-      if (clean) continue
       try {
         const d = JSON.parse(line)
+        updatedAt = Math.max(updatedAt, Date.parse(d.timestamp ?? '') || 0)
+        // Titles are regenerated as the session grows; the last one is current.
+        if (d.type === 'ai-title' && typeof d.aiTitle === 'string') title = d.aiTitle
+        if (d.type === 'custom-title' && typeof d.customTitle === 'string') title = d.customTitle
         if (d.type !== 'user') continue
+        turns++
         if (!cwd && typeof d.cwd === 'string') cwd = d.cwd
         if (!startedAt && d.timestamp) startedAt = Date.parse(d.timestamp) || 0
+        if (clean) continue
         const text = textFromClaudeContent(d.message?.content)
         if (!text.trim()) continue
         if (!anyUser) anyUser = squish(text)
@@ -287,7 +281,7 @@ async function parseClaudeChat(path: string, bytes: number, mtime: number): Prom
     project,
     path,
     startedAt: startedAt || mtime,
-    updatedAt: mtime,
+    updatedAt: updatedAt || mtime,
     turns,
     bytes,
     // An AI title means Claude summarised a real conversation here.
@@ -295,38 +289,49 @@ async function parseClaudeChat(path: string, bytes: number, mtime: number): Prom
   }
 }
 
+function textFromCodexContent(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content.filter(block => block && ['input_text', 'output_text', 'text'].includes(block.type) && typeof block.text === 'string')
+    .map(block => block.text).join('\n')
+}
+
 async function parseCodexChat(path: string, bytes: number, mtime: number): Promise<ChatEntry> {
   let sessionId = ''
   let rolloutId = ''
   let cwd = ''
   let startedAt = 0
+  let updatedAt = 0
   let preview = ''
   let anyUser = ''
   let turns = 0
+  let responseTurns = 0
 
   const rl = createInterface({ input: createReadStream(path, { encoding: 'utf8' }), crlfDelay: Infinity })
   try {
     for await (const line of rl) {
       if (line.length < 12) continue
-      if (!sessionId && line.includes('session_meta')) {
-        try {
-          const d = JSON.parse(line)
+      try {
+        const d = JSON.parse(line)
+        updatedAt = Math.max(updatedAt, Date.parse(d.timestamp ?? '') || 0)
+        if (d.type === 'session_meta') {
           const p = d.payload ?? {}
           sessionId = String(p.session_id ?? '')
           rolloutId = String(p.id ?? '')
           cwd = String(p.cwd ?? '')
           startedAt = Date.parse(p.timestamp ?? d.timestamp ?? '') || 0
-        } catch {
-          /* ignore malformed line */
+          continue
         }
-        continue
-      }
-      if (!line.includes('"user_message"')) continue
-      turns++
-      if (preview) continue
-      try {
-        const d = JSON.parse(line)
-        const msg = d?.payload?.message
+        const p = d.payload ?? {}
+        let msg = ''
+        if (d.type === 'event_msg' && p.type === 'user_message') {
+          turns++
+          msg = typeof p.message === 'string' ? p.message : ''
+        } else if (d.type === 'response_item' && p.type === 'message' && p.role === 'user') {
+          responseTurns++
+          msg = textFromCodexContent(p.content)
+        } else continue
+        if (preview) continue
         if (typeof msg !== 'string' || !msg.trim()) continue
         if (!anyUser) anyUser = squish(msg)
         // The first user_message is usually an AGENTS.md injection, not the prompt.
@@ -354,8 +359,9 @@ async function parseCodexChat(path: string, bytes: number, mtime: number): Promi
     project: cwd ? basename(cwd) : 'unknown',
     path,
     startedAt: startedAt || mtime,
-    updatedAt: mtime,
-    turns,
+    updatedAt: updatedAt || mtime,
+    // Modern logs can contain both representations of the same user turn.
+    turns: turns || responseTurns,
     bytes,
     internal: !preview
   }
@@ -369,7 +375,7 @@ interface CacheShape {
 }
 
 // Bump whenever parsing changes, so cached entries are re-derived.
-const CACHE_VERSION = 5
+const CACHE_VERSION = 6
 
 /**
  * Indexes ~300MB of agent transcripts. Every parse is keyed on (size, mtime),
@@ -431,13 +437,12 @@ export class CatalogService {
     const files: { path: string; agent: 'claude' | 'codex' }[] = []
     const claudeProjects = join(CLAUDE_DIR, 'projects')
     if (existsSync(claudeProjects)) {
-      for (const p of await walk(claudeProjects, (f) => f.endsWith('.jsonl'), 2)) {
+      for (const p of await walk(claudeProjects, (f) => f.endsWith('.jsonl'))) {
         files.push({ path: p, agent: 'claude' })
       }
     }
-    const codexSessions = join(CODEX_DIR, 'sessions')
-    if (existsSync(codexSessions)) {
-      for (const p of await walk(codexSessions, (f) => f.endsWith('.jsonl'), 5)) {
+    for (const codexSessions of [join(CODEX_DIR, 'sessions'), join(CODEX_DIR, 'archived_sessions')]) {
+      for (const p of await walk(codexSessions, (f) => f.endsWith('.jsonl'))) {
         files.push({ path: p, agent: 'codex' })
       }
     }
@@ -452,7 +457,7 @@ export class CatalogService {
         const hit = this.cache.files[path]
         if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs) {
           entry = hit.entry
-        } else if (st.size > 0 && st.size < 256 * 1024 * 1024) {
+        } else if (st.size > 0) {
           entry =
             agent === 'claude'
               ? await parseClaudeChat(path, st.size, st.mtimeMs)
@@ -469,14 +474,21 @@ export class CatalogService {
       return entry
     })
 
-    const chats = parsed.filter((c): c is ChatEntry => c !== null && c.turns > 0)
+    const unique = new Map<string, ChatEntry>()
+    for (const entry of parsed) {
+      if (!entry || !entry.id || entry.turns === 0) continue
+      const key = `${entry.agent}:${entry.id}`
+      const previous = unique.get(key)
+      if (!previous || entry.updatedAt > previous.updatedAt) unique.set(key, entry)
+    }
+    const chats = [...unique.values()]
 
     // Forget cache rows whose files are gone.
     const live = new Set(files.map((f) => f.path))
     for (const k of Object.keys(this.cache.files)) if (!live.has(k)) delete this.cache.files[k]
     await this.saveCache()
 
-    chats.sort((a, b) => b.updatedAt - a.updatedAt)
+    chats.sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))
 
     const byProject = new Map<string, ProjectEntry>()
     for (const c of chats) {
@@ -505,6 +517,7 @@ export class CatalogService {
   /** Reads a transcript back into readable turns, tool noise collapsed. */
   async transcript(path: string, agent: 'claude' | 'codex', limit = 400): Promise<{ turns: ChatTurn[]; truncated: boolean }> {
     const turns: ChatTurn[] = []
+    const responseTurns: ChatTurn[] = []
     let truncated = false
     const rl = createInterface({ input: createReadStream(path, { encoding: 'utf8' }), crlfDelay: Infinity })
     try {
@@ -523,8 +536,13 @@ export class CatalogService {
             if (!text) continue
             turns.push({ role: d.type, text, ts: Date.parse(d.timestamp ?? '') || 0 })
           } else {
-            if (!line.includes('"user_message"') && !line.includes('"agent_message"')) continue
             const d = JSON.parse(line)
+            if (d.type === 'response_item' && d.payload?.type === 'message' && ['user', 'assistant'].includes(d.payload.role)) {
+              const text = textFromCodexContent(d.payload.content).trim()
+              if (text && responseTurns.length <= limit) responseTurns.push({ role: d.payload.role, text, ts: Date.parse(d.timestamp ?? '') || 0 })
+              continue
+            }
+            if (d.type !== 'event_msg') continue
             const kind = d?.payload?.type
             const msg = d?.payload?.message
             if (typeof msg !== 'string' || !msg.trim()) continue
@@ -539,7 +557,11 @@ export class CatalogService {
     } finally {
       rl.close()
     }
-    return { turns, truncated }
+    // Some histories contain only response items; modern files often duplicate
+    // those messages as event_msg records. Prefer events for each recorded role.
+    const eventRoles = new Set(turns.map(turn => turn.role))
+    const combined = [...turns, ...responseTurns.filter(turn => !eventRoles.has(turn.role))].sort((a, b) => a.ts - b.ts)
+    return { turns: combined.slice(0, limit), truncated: truncated || combined.length > limit }
   }
 }
 

@@ -48,6 +48,11 @@ export default function App(): React.JSX.Element {
   const prevWaiting = useRef(0)
 
   const [searchOpen, setSearchOpen] = useState(false)
+  useEffect(() => {
+    const refresh = (): void => { if (useStore.getState().ready) void useStore.getState().loadCatalog(true) }
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [])
   const [dockDrag, setDockDrag] = useState({ dragging: false, over: false })
   const [searchTerm, setSearchTerm] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
