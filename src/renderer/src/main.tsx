@@ -5,5 +5,6 @@ import './styles.css'
 
 // Deliberately no StrictMode: it double-invokes effects in dev, which would
 // spawn a second pty and a second xterm instance for every pane.
+document.documentElement.dataset.platform = window.buddy.platform
 const detachedId = new URLSearchParams(window.location.search).get('popout')
 createRoot(document.getElementById('root')!).render(detachedId ? <DetachedTerminal id={detachedId} /> : <App />)

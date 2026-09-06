@@ -9,7 +9,7 @@ export default function SessionName({ session }: { session: Session }): React.JS
   const finish = (value: string): void => {
     if (!cancelled.current) useStore.getState().renameSession(session.id, value)
     setEditing(false)
-    if (useStore.getState().layout !== 'world') requestAnimationFrame(() => focus(session.id))
+    requestAnimationFrame(() => focus(session.id))
   }
   return (
     <span className="session-name" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>

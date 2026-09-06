@@ -15,6 +15,7 @@ function resourcePath(name: string): string {
 export interface TrayHooks {
   onShow: () => void
   onNewTerminal: () => void
+  onNewWindow: () => void
   onOpenFolder: () => void
   onQuit: () => void
   /** Recent project folders, newest first. */
@@ -38,7 +39,8 @@ export class TrayController {
   }
 
   private create(): void {
-    const icon = nativeImage.createFromPath(resourcePath('tray.png'))
+    const image = nativeImage.createFromPath(resourcePath('tray.png'))
+    const icon = process.platform === 'darwin' ? image.resize({ width: 18, height: 18 }) : image
     this.tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
     this.tray.on('click', () => this.hooks.onShow())
     this.tray.on('double-click', () => this.hooks.onShow())
@@ -75,6 +77,7 @@ export class TrayController {
         { type: 'separator' },
         { label: 'Show Terminal Buddy', click: () => this.hooks.onShow() },
         { label: 'New chat or terminal…', click: () => this.hooks.onNewTerminal() },
+        { label: 'New window', click: () => this.hooks.onNewWindow() },
         { label: 'Open folder…', click: () => this.hooks.onOpenFolder() },
         ...(recent.length
           ? [
@@ -105,6 +108,10 @@ export class TrayController {
  * a canvas and the live theme colours — and hands the result over as a data URL.
  */
 export function setTaskbarBadge(win: BrowserWindow | null, dataUrl: string | null, waiting: number): void {
+  if (process.platform === 'darwin') {
+    app.dock?.setBadge(waiting > 0 ? String(waiting) : '')
+    return
+  }
   if (!win || win.isDestroyed() || process.platform !== 'win32') return
   if (!dataUrl || waiting <= 0) {
     win.setOverlayIcon(null, '')

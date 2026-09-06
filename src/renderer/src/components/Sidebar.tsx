@@ -14,6 +14,7 @@ const TABS: { id: SidebarTab; label: string }[] = [
 ]
 
 export default function Sidebar(): React.JSX.Element {
+  const pinned = useStore(s => s.library.pinnedChats)
   const tab = useStore((s) => s.sidebarTab)
   const setSidebar = useStore((s) => s.setSidebar)
   const width = useStore((s) => s.sidebarWidth)
@@ -27,7 +28,7 @@ export default function Sidebar(): React.JSX.Element {
 
   const [q, setQ] = useState('')
   const [agentFilter, setAgentFilter] = useState<'all' | 'claude' | 'codex'>('all')
-  const [showInternal, setShowInternal] = useState(false)
+  const [showInternal, setShowInternal] = useState(true)
   const [detail, setDetail] = useState<ChatEntry | null>(null)
   const [skillDetail, setSkillDetail] = useState<SkillEntry | null>(null)
 
@@ -55,7 +56,7 @@ export default function Sidebar(): React.JSX.Element {
       if (!showInternal && c.internal) return false
       if (!q) return true
       return fuzzy(q, `${c.title} ${c.preview} ${c.project} ${c.cwd}`)
-    })
+    }).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id))
   }, [catalog, q, agentFilter, showInternal])
 
   const skills = useMemo(() => {
@@ -112,6 +113,7 @@ export default function Sidebar(): React.JSX.Element {
           onChange={(e) => setQ(e.target.value)}
         />
 
+        {tab === 'chats' && <small className="hint">Most recently used first · refreshes automatically</small>}
         <div className="filter-row">
           {tab !== 'projects' && (
             <div className="seg small">
@@ -174,6 +176,10 @@ export default function Sidebar(): React.JSX.Element {
                 <span>{timeAgo(c.updatedAt)}</span>
               </div>
               <div className="row-actions">
+                <button className="btn tiny" data-pin-chat={c.id} aria-pressed={pinned.some(p => p.agent === c.agent && p.id === c.id)}
+                  onClick={e => { e.stopPropagation(); void window.buddy.library.pin(c, !pinned.some(p => p.agent === c.agent && p.id === c.id)).catch(error => notify(error.message)) }}>
+                  {pinned.some(p => p.agent === c.agent && p.id === c.id) ? '★ Unpin' : '☆ Pin'}
+                </button>
                 <button
                   className="btn tiny primary"
                   onClick={(e) => {

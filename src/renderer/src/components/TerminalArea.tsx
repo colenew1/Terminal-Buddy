@@ -49,12 +49,21 @@ export default function TerminalArea(): React.JSX.Element {
   const reduceMotion = useStore((s) => s.settings.reduceMotion)
   const setActive = useStore((s) => s.setActive)
   const closeSession = useStore((s) => s.closeSession)
-  const openSession = useStore((s) => s.openSession)
   const settingsOpen = useStore((s) => s.settingsOpen)
   const paletteOpen = useStore((s) => s.paletteOpen)
+  const transferBusy = useStore(s => s.transferBusy || !!s.moveSessionId || s.presetsOpen)
   const pendingCloseId = useStore((s) => s.pendingCloseId)
   const newSessionOpen = useStore((s) => s.newSessionOpen)
   const restoring = useStore((s) => !!s.restoreItems || s.restoring)
+  const walkthroughOpen = useStore((s) => s.walkthroughOpen)
+  const linkSessionId = useStore((s) => s.linkSessionId)
+  const focusedSessionId = useStore((s) => s.focusedSessionId)
+  const focused = sessions.some((s) => s.id === focusedSessionId && !s.detached)
+  const toggleFocus = (id: string): void => {
+    if (sessions.find((s) => s.id === id)?.detached) return
+    setActive(id)
+    useStore.setState({ focusedSessionId: focusedSessionId === id ? null : id })
+  }
 
   const areaRef = useRef<HTMLDivElement>(null)
   const [dragId, setDragId] = useState<string | null>(null)
@@ -65,17 +74,17 @@ export default function TerminalArea(): React.JSX.Element {
   useEffect(() => {
     const t = requestAnimationFrame(() => fitAll())
     return () => cancelAnimationFrame(t)
-  }, [layout, sessions.length])
+  }, [layout, sessions.length, focusedSessionId])
 
   useEffect(() => {
-    if (!activeId || sessions.find((s) => s.id === activeId)?.detached || !locked || layout === 'world' || settingsOpen || paletteOpen || pendingCloseId || newSessionOpen || restoring) return
+    if (!activeId || sessions.find((s) => s.id === activeId)?.detached || (!locked && !focused) || settingsOpen || paletteOpen || transferBusy || pendingCloseId || newSessionOpen || restoring || walkthroughOpen || linkSessionId) return
     const cell = [...(areaRef.current?.querySelectorAll<HTMLElement>('.cell') ?? [])]
       .find((el) => el.dataset.sessionId === activeId)
     if (!cell) return
-    const focused = document.activeElement
-    if (cell.contains(focused) && focused?.closest('.session-name')) return
-    if (!cell.contains(focused) || !focused?.classList.contains('xterm-helper-textarea')) focusTerm(activeId)
-  }, [activeId, locked, layout, settingsOpen, paletteOpen, pendingCloseId, newSessionOpen, restoring, sessions.some((s) => s.id === activeId && s.detached)])
+    const activeElement = document.activeElement
+    if (cell.contains(activeElement) && activeElement?.closest('.session-name')) return
+    if (!cell.contains(activeElement) || !activeElement?.classList.contains('xterm-helper-textarea')) focusTerm(activeId)
+  }, [activeId, locked, layout, settingsOpen, paletteOpen, transferBusy, pendingCloseId, newSessionOpen, restoring, walkthroughOpen, linkSessionId, focusedSessionId, sessions.some((s) => s.id === activeId && s.detached)])
 
   // A catalog drag ends on the sidebar row, so listen globally to clear up.
   useEffect(() => {
@@ -169,16 +178,13 @@ export default function TerminalArea(): React.JSX.Element {
         <div className="empty-card">
           <Buddy mood="asleep" size={72} title="Nothing to do" />
           <h2>Nothing open. I&rsquo;ll wait.</h2>
-          <p>Point me at a folder and I&rsquo;ll get a terminal going.</p>
+          <p>Pick a chat, start a new one, or open a fresh terminal.</p>
           <div className="empty-actions">
             <button
               className="btn primary"
-              onClick={async () => {
-                const dir = await window.buddy.app.pickFolder()
-                if (dir) void openSession({ cwd: dir })
-              }}
+              onClick={() => useStore.getState().setNewSessionOpen(true)}
             >
-              Open folder…
+              Open something…
             </button>
             <button className="btn" onClick={() => useStore.getState().setSidebar(true, 'chats')}>
               Pick up an old chat
@@ -200,20 +206,17 @@ export default function TerminalArea(): React.JSX.Element {
       ref={areaRef}
       className={[
         'area',
-        layout === 'grid' ? 'area-grid' : 'area-tabs',
-        layout === 'world' ? 'is-behind' : '',
-        locked ? '' : 'is-unlocked',
+        layout === 'grid' && !focused ? 'area-grid' : 'area-tabs',
+        locked || focused ? '' : 'is-unlocked',
         itemDrag ? 'is-item-drag' : ''
       ]
         .filter(Boolean)
         .join(' ')}
-      style={layout === 'grid' ? {
+      style={layout === 'grid' && !focused ? {
         // Large fr factors prevent CSS's sub-1fr partial-fill behavior when a neighbor reaches its minimum.
         gridTemplateColumns: columnWeights.map((n) => `minmax(min(160px, calc((100% - ${(cols - 1) * 8}px) / ${cols})), ${n * 1000}fr)`).join(' '),
         gridTemplateRows: rowWeights.map((n) => `minmax(min(110px, calc((100% - ${(rows - 1) * 8}px) / ${rows})), ${n * 1000}fr)`).join(' ')
       } : undefined}
-      aria-hidden={layout === 'world'}
-      inert={layout === 'world'}
       onDragEnter={() => {
         const item = getDragItem()
         if (item) setItemDrag(item)
@@ -221,7 +224,7 @@ export default function TerminalArea(): React.JSX.Element {
     >
       {sessions.map((s, i) => {
         const active = s.id === activeId
-        const visible = layout === 'grid' || active
+        const visible = focused ? s.id === focusedSessionId : layout === 'grid' || active
         const isDragging = dragId === s.id
         const verdict = itemDrag ? canDrop(itemDrag, s, agents[s.id]) : null
         const hovered = hoverId === s.id
@@ -229,10 +232,13 @@ export default function TerminalArea(): React.JSX.Element {
         return (
           <div
             key={s.id}
+            inert={!visible}
+            onPointerDownCapture={() => { if (s.attention) setActive(s.id) }}
             data-session-id={s.id}
             className={[
               'cell',
               active ? 'is-active' : '',
+              s.attention ? 'needs-look' : '',
               visible ? '' : 'is-stacked',
               isDragging ? 'is-dragging' : '',
               verdict ? (verdict.ok ? 'can-drop' : 'cannot-drop') : '',
@@ -241,7 +247,7 @@ export default function TerminalArea(): React.JSX.Element {
               .filter(Boolean)
               .join(' ')}
             style={
-              layout === 'grid'
+              layout === 'grid' && !focused
                 ? {
                     gridColumn: i % cols + 1,
                     gridRow: Math.floor(i / cols) + 1,
@@ -272,17 +278,27 @@ export default function TerminalArea(): React.JSX.Element {
               if (v.ok) applyDrop(item, s)
             }}
           >
-            {layout !== 'world' && (
-              <div className="cell-head" onPointerDown={(event) => beginTerminalDrag(event, s.id)} onMouseDown={() => locked && setActive(s.id)} title="Drag this header outside the app to pop out; drag onto another pane to rearrange">
+            {(
+              <div className="cell-head" onDoubleClick={(event) => {
+                if (!(event.target as HTMLElement).closest('button, input')) toggleFocus(s.id)
+              }} onPointerDown={(event) => beginTerminalDrag(event, s.id)} onMouseDown={() => locked && setActive(s.id)} title="Double-click empty header space to focus. Drag outside the app to pop out.">
                 <span className="cell-critter" title={`the ${s.critter.name}`}>
                   {s.critter.emoji}
                 </span>
                 <span className="cell-index">{i + 1}</span>
                 <SessionName session={s} />
+                {s.assistantId && <span className="badge" data-custom-assistant={s.assistantId}>{s.assistantName ?? 'Custom assistant'}</span>}
                 {agents[s.id] && <span className={`badge ${agents[s.id]}`}>{agents[s.id]}</span>}
                 <span className="cell-path">{shortPath(s.cwd, 2)}</span>
-                {s.attention && <span className="dot attention" title="Waiting on you" />}
+                {s.attention && <span className="dot attention" title="Output paused — check the terminal prompt" />}
                 <TerminalStatus session={s} />
+                {!s.assistantId && <button className="icon-btn tiny recovery-link" data-link-session={s.id}
+                  title={s.resume ? `Recovery linked to ${s.resume.agent} ${s.resume.id}. Click to review.` : 'Link a saved chat for recovery. Plain terminals reopen their folder only.'}
+                  onClick={() => useStore.setState({ linkSessionId: s.id })}>{s.resume ? 'Linked' : 'Link chat'}</button>}
+                {!s.detached && <button className="icon-btn tiny" data-focus-session={s.id}
+                  title={focused ? 'Return to layout (Escape)' : 'Focus terminal (double-click header)'}
+                  onClick={() => toggleFocus(s.id)}>{focused ? '↙' : '⛶'}</button>}
+                <button className="icon-btn tiny" data-move-session={s.id} title="Move terminal to another window" onClick={() => useStore.setState({ moveSessionId: s.id })}>⇥</button>
                 <button className="icon-btn tiny" data-popout={s.id} title={s.detached ? 'Show popped-out terminal' : 'Pop out terminal'}
                   onClick={() => void useStore.getState().detachSession(s.id)}>↗</button>
                 <button
@@ -303,7 +319,7 @@ export default function TerminalArea(): React.JSX.Element {
               <TerminalPane
                 session={s}
                 visible={visible && !s.detached}
-                interactive={visible && !s.detached && layout !== 'world' && locked}
+                interactive={visible && !s.detached && !transferBusy && (locked || focused)}
               />
               {s.detached && <div className="detached-placeholder"><span>{s.critter.emoji}</span><strong>Open in its own window</strong>
                 <button className="btn" onClick={() => window.buddy.popout.focus(s.id)}>Show window ↗</button>
@@ -311,7 +327,7 @@ export default function TerminalArea(): React.JSX.Element {
             </div>
 
             {/* While unlocked, a shield keeps xterm from claiming the pointer. */}
-            {!locked && visible && !s.detached && (
+            {!locked && !focused && visible && !s.detached && (
               <div
                 className="cell-shield"
                 onPointerDown={(e) => onShieldDown(e, s.id)}
@@ -333,7 +349,7 @@ export default function TerminalArea(): React.JSX.Element {
           </div>
         )
       })}
-      {!locked && layout === 'grid' && <GridDividers columns={columnWeights} rows={rowWeights} />}
+      {!locked && !focused && layout === 'grid' && <GridDividers columns={columnWeights} rows={rowWeights} />}
     </div>
   )
 }

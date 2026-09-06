@@ -12,7 +12,7 @@ import { join } from 'node:path'
 const PORT = 9222
 const OUT = process.argv[2] ?? join(tmpdir(), 'terminal-buddy-smoke.png')
 const profile = mkdtempSync(join(tmpdir(), 'terminal-buddy-smoke-'))
-writeFileSync(join(profile, 'settings.json'), JSON.stringify({ desktopNotifications: false }))
+writeFileSync(join(profile, 'settings.json'), JSON.stringify({ walkthroughVersion: 1, desktopNotifications: false }))
 
 // BUDDY_EXE points the harness at a packaged build instead of the dev output.
 const packaged = process.env.BUDDY_EXE
@@ -142,6 +142,11 @@ try {
     await sleep(500)
   }
   check('app boots past splash', booted)
+  for (let i = 0; i < 40; i++) {
+    if (await evaluate(`!!document.querySelector('[data-new-kind="shell"]:not(:disabled)')`)) break
+    await sleep(100)
+  }
+  await evaluate(`document.querySelector('[data-new-kind="shell"]').click()`)
 
   const shells = await evaluate(`window.buddy.shells.list().then(s => s.map(x => x.label))`)
   check('shells detected', Array.isArray(shells) && shells.length > 0, shells?.join(', '))
@@ -290,7 +295,7 @@ try {
   if (catalog.errors > 0) console.log(`      (${catalog.errors} files unreadable)`)
 
   // Open the sidebar and switch to grid, then confirm panes still measure.
-  await evaluate(`document.querySelectorAll('.topbar .icon-btn')[0].click()`)
+  await evaluate(`document.querySelector('.topbar button[title^="Catalog"]').click()`)
   await sleep(400)
   const sidebar = await evaluate(`!!document.querySelector('.sidebar')`)
   check('sidebar opens', sidebar)

@@ -45,6 +45,8 @@ export function canDrop(item: DragItem, session: Session, running: Agent | null 
     return { ok: false, reason: 'That terminal has exited' }
   }
 
+  if (session.assistantId) return { ok: false, reason: 'This terminal runs a custom assistant. Open the saved chat or skill in a separate terminal.' }
+
   const agent = item.kind === 'chat' ? item.entry.agent : item.entry.agent
 
   if (item.kind === 'chat') {

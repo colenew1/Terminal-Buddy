@@ -1,7 +1,18 @@
 /** Types shared between the Electron main process, the preload bridge and the renderer. */
 
-export type LayoutMode = 'tabs' | 'grid' | 'world'
+export type LayoutMode = 'tabs' | 'grid'
 export type Agent = 'claude' | 'codex'
+
+/** User-configured CLI launcher. Built-in history parsers remain agent-specific. */
+export interface AssistantProfile { id: string; name: string; command: string }
+
+export function validAssistantProfile(value: unknown): value is AssistantProfile {
+  if (!value || typeof value !== 'object') return false
+  const p = value as AssistantProfile
+  return typeof p.id === 'string' && /^[0-9a-f-]{36}$/.test(p.id) &&
+    typeof p.name === 'string' && p.name.trim().length > 0 && p.name.length <= 60 &&
+    typeof p.command === 'string' && p.command.trim().length > 0 && p.command.length <= 2000 && !/[\r\n\x00]/.test(p.command)
+}
 
 /** Explicit conversation identity. Never inferred from a folder's newest file. */
 export interface ResumeRef { agent: Agent; id: string; path: string }
@@ -35,7 +46,7 @@ export interface ShellDef {
   args: string[]
 }
 
-/** Where a bubble sits in the world view. */
+/** Window/drag point; legacy saved spatial positions remain readable. */
 export interface Pos {
   x: number
   y: number
@@ -50,6 +61,8 @@ export interface Span {
 /** What the renderer asks for when opening a terminal. */
 export interface SessionSpec {
   cwd: string
+  assistantId?: string
+  assistantName?: string
   shellId?: string
   title?: string
   /** Typed into the shell once it is ready (used by "resume this chat"). */
@@ -62,13 +75,15 @@ export interface SessionSpec {
   critter?: string
   /** Renderer-only: restore a saved grid footprint. */
   span?: Span
-  /** Renderer-only: restore a saved world position. */
+  /** Legacy spatial position, retained when reading old workspaces. */
   pos?: Pos
 }
 
 /** What main returns once the pty is alive. */
 export interface SessionInfo {
   id: string
+  assistantId?: string
+  assistantName?: string
   cwd: string
   shellId: string
   shellLabel: string
@@ -164,6 +179,7 @@ export interface ChatTranscript {
 }
 
 export interface Settings {
+  customAssistants: AssistantProfile[]
   defaultShellId: string
   fontSize: number
   fontFamily: string
@@ -191,6 +207,9 @@ export interface Settings {
   chime: boolean
   /** Native desktop alerts after a submitted terminal goes quiet or exits. */
   desktopNotifications: boolean
+  /** One-time opt-in migration: older releases enabled alerts by default. */
+  alertsOptInVersion: number
+  walkthroughVersion: number
   /** Stills every animation, including the buddy. */
   reduceMotion: boolean
   /** Click in the command line to put the cursor there, instead of arrowing over. */
@@ -206,9 +225,10 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  customAssistants: [],
   defaultShellId: 'pwsh',
   fontSize: 13,
-  fontFamily: '"Cascadia Mono", "JetBrains Mono", Consolas, "Courier New", monospace',
+  fontFamily: '"Cascadia Mono", "JetBrains Mono", Menlo, Monaco, Consolas, "Courier New", monospace',
   scrollback: 5000,
   layout: 'tabs',
   attentionDelayMs: 1200,
@@ -224,7 +244,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'midnight',
   critters: true,
   chime: false,
-  desktopNotifications: true,
+  desktopNotifications: false,
+  alertsOptInVersion: 1,
+  walkthroughVersion: 0,
   reduceMotion: false,
   clickToPosition: true,
   critterPack: 'forest',
@@ -235,6 +257,8 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export interface PersistedSession {
   cwd: string
+  assistantId?: string
+  assistantName?: string
   shellId: string
   title: string
   resume?: ResumeRef
@@ -279,4 +303,47 @@ export interface IntegrationStatus {
 export interface OpResult {
   ok: boolean
   message: string
+}
+
+/** View metadata travels with a live PTY; commands are never replayed by a move. */
+export interface TransferSession {
+  session: SessionInfo
+  critter: string
+  span: Span
+  pos: Pos
+  hasInput: boolean
+  hasConversation: boolean
+  attention: boolean
+  unseen: boolean
+  lastDataAt: number
+  busy: boolean
+  agent: Agent | null
+  feeds: FeedEvent[]
+}
+
+export interface TransferState {
+  sessions: TransferSession[]
+  workspace: Workspace
+  error?: string
+}
+
+export interface TransferArrival extends TransferSession {
+  snapshot: TerminalSnapshot
+  exited: boolean
+  exitCode?: number
+}
+
+export interface WorkspacePreset {
+  id: string
+  name: string
+  layout: LayoutMode
+  gridSizes?: Workspace['gridSizes']
+  /** Fresh assistants and shells only, never saved input or arbitrary commands. */
+  sessions: Pick<PersistedSession, 'cwd' | 'shellId' | 'title' | 'agent' | 'critter' | 'assistantId' | 'assistantName'>[]
+}
+
+export interface LauncherLibrary {
+  recentFolders: string[]
+  pinnedChats: ChatEntry[]
+  presets: WorkspacePreset[]
 }

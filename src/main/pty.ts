@@ -3,7 +3,7 @@ import { existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { WebContents } from 'electron'
-import type { SessionInfo, SessionSpec, ShellDef } from '@shared/types'
+import type { ResumeRef, SessionInfo, SessionSpec, ShellDef } from '@shared/types'
 import { resolveShell } from './shells'
 import { Terminal as HeadlessTerminal } from '@xterm/headless'
 import { SerializeAddon } from '@xterm/addon-serialize'
@@ -117,19 +117,26 @@ export class PtyManager {
       command = `claude --session-id ${chatId}`
     }
 
-    const pty = loadPty().spawn(shell.path, shell.args, {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd,
-      env: this.buildEnv(),
-      useConpty: true
-    })
+    let pty: IPty
+    try {
+      pty = loadPty().spawn(shell.path, shell.args, {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        cwd,
+        env: this.buildEnv(),
+        ...(process.platform === 'win32' ? { useConpty: true } : {})
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new Error(`Could not open ${shell.label} (${shell.path}). ${reason}\nChoose another default shell in Settings. If the error mentions node-pty or a native module, reinstall Terminal Buddy for your operating system and processor.`)
+    }
 
     const info: SessionInfo = {
       id,
       cwd,
       shellId: shell.id,
+      assistantId: spec.assistantId, assistantName: spec.assistantName,
       shellLabel: shell.label,
       title: spec.title || basename(cwd),
       pid: pty.pid,
@@ -298,6 +305,13 @@ export class PtyManager {
   rename(id: string, title: string): void {
     const e = this.entries.get(id)
     if (e) e.info.title = title
+  }
+
+  link(id: string, resume: ResumeRef, cwd: string): SessionInfo {
+    const entry = this.entries.get(id)
+    if (!entry) throw Error('This terminal has closed.')
+    entry.info = { ...entry.info, resume, cwd }
+    return entry.info
   }
 
   snapshot(id: string): Promise<TerminalSnapshot> {

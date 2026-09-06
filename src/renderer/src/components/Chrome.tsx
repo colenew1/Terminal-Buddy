@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { shortcutLabel } from '../lib/shortcuts'
+import { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { shortPath } from '../lib/format'
 import { fleetStatus } from '../lib/copy'
@@ -52,50 +53,44 @@ export function TopBar(): React.JSX.Element {
       </div>
 
       <div className="topbar-actions">
+        <WorkspaceWindowMenu />
         <button
           className={`icon-btn ${sidebarOpen ? 'is-on' : ''}`}
-          title="Catalog — skills, chats, projects (Ctrl+Shift+E)"
+          title={shortcutLabel("Catalog — skills, chats, projects (Ctrl+Shift+E)")}
           onClick={() => setSidebar(!sidebarOpen)}
         >
           ▤
         </button>
-        <button className="icon-btn" title="Command palette (Ctrl+Shift+P)" onClick={() => setPalette(true)}>
+        <button className="icon-btn" title={shortcutLabel("Command palette (Ctrl+Shift+P)")} onClick={() => setPalette(true)}>
           ⌘
         </button>
         <div className="seg">
           <button
             className={layout === 'tabs' ? 'is-on' : ''}
-            title="Tabs (Ctrl+Shift+G)"
+            title={shortcutLabel("Tabs (Ctrl+Shift+G)")}
             onClick={() => setLayout('tabs')}
           >
             Tabs
           </button>
           <button
             className={layout === 'grid' ? 'is-on' : ''}
-            title="Grid (Ctrl+Shift+G)"
+            title={shortcutLabel("Grid (Ctrl+Shift+G)")}
             onClick={() => setLayout('grid')}
           >
             Grid
           </button>
-          <button
-            className={layout === 'world' ? 'is-on' : ''}
-            title="World — every agent as a creature (Ctrl+Shift+G)"
-            onClick={() => setLayout('world')}
-          >
-            World
-          </button>
         </div>
-        {layout !== 'world' && (
+        {(
           <button
             className={`icon-btn ${locked ? '' : 'is-warn'}`}
             title={
               locked
-                ? 'Layout locked - click to unlock and rearrange panes (Ctrl+Shift+L)'
-                : 'Layout unlocked - drag panes to move, or grid dividers to resize. Click to lock (Ctrl+Shift+L)'
+                ? shortcutLabel('Layout locked - click to unlock and rearrange panes (Ctrl+Shift+L)')
+                : shortcutLabel('Layout unlocked - drag panes to move, or grid dividers to resize. Click to lock (Ctrl+Shift+L)')
             }
             onClick={() => {
               setLocked(!locked)
-              notify(locked ? 'Unlocked — drag panes to move; drag grid dividers to resize.' : 'Layout locked.')
+              notify(locked ? 'Unlocked — drag panes to move; drag grid dividers to resize.' : shortcutLabel('Layout locked.'))
             }}
           >
             {locked ? '🔒' : '🔓'}
@@ -103,17 +98,54 @@ export function TopBar(): React.JSX.Element {
         )}
         <button
           className={`icon-btn ${broadcast ? 'is-danger' : ''}`}
-          title="Broadcast typing to every terminal (Ctrl+Shift+B)"
+          title={shortcutLabel("Broadcast typing to every terminal (Ctrl+Shift+B)")}
           onClick={toggleBroadcast}
         >
           ⇉
         </button>
-        <button className="icon-btn" title="Settings (Ctrl+,)" onClick={() => setSettingsOpen(true)}>
+        <button className="icon-btn" title={shortcutLabel("Settings (Ctrl+,)")} onClick={() => setSettingsOpen(true)}>
           ⚙
         </button>
       </div>
     </div>
   )
+}
+
+function WorkspaceWindowMenu(): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [windows, setWindows] = useState<Awaited<ReturnType<typeof window.buddy.app.windows>>>([])
+  const refresh = (): void => { void window.buddy.app.windows().then(setWindows).catch(() => setOpen(false)) }
+  useEffect(() => {
+    refresh()
+    return window.buddy.app.onWindowsChanged(refresh)
+  }, [])
+  useEffect(() => {
+    if (!open) return
+    refresh()
+    const dismiss = (event: PointerEvent): void => {
+      if (!(event.target as HTMLElement).closest('.workspace-window-menu')) setOpen(false)
+    }
+    const escape = (event: KeyboardEvent): void => { if (event.key === 'Escape') setOpen(false) }
+    window.addEventListener('pointerdown', dismiss)
+    window.addEventListener('keydown', escape)
+    return () => { window.removeEventListener('pointerdown', dismiss); window.removeEventListener('keydown', escape) }
+  }, [open])
+  return <div className="workspace-window-menu">
+    <button className="icon-btn" data-new-window aria-label="New window" title={shortcutLabel('New workspace window (Ctrl+Shift+N)')}
+      onClick={() => void window.buddy.app.newWindow().catch((error) => useStore.getState().notify(error.message))}>⊞</button>
+    <button className="icon-btn" data-window-menu aria-label="Switch workspace window" title="Workspace windows" aria-expanded={open}
+      onClick={() => setOpen(!open)}>▾</button>
+    {open && <div className="workspace-window-list" aria-label="Workspace windows">
+      <button className="btn" data-combine-windows disabled={windows.length < 2} onClick={() => {
+        setOpen(false); void window.buddy.workspace.combine().catch(error => useStore.getState().notify(error.message))
+      }}>Combine all windows here</button>
+      <button className="btn" data-workspace-presets onClick={() => { setOpen(false); useStore.setState({ presetsOpen: true }) }}>Workspace presets…</button>
+      {windows.map((entry) => <button key={entry.id} className="btn" data-window-target={entry.id} disabled={entry.current}
+        onClick={() => { setOpen(false); void window.buddy.app.focusWindow(entry.id).catch((error) => useStore.getState().notify(error.message)) }}>
+        {entry.label}{entry.current ? ' · this window' : ''}<small>{entry.terminals} terminal{entry.terminals === 1 ? '' : 's'}</small>
+      </button>)}
+    </div>}
+  </div>
 }
 
 export function TabBar(): React.JSX.Element {
@@ -163,14 +195,15 @@ export function TabBar(): React.JSX.Element {
             ) : (
               <span className="tab-title">{s.title}</span>
             )}
-            {s.attention && <span className="dot attention" title="Went quiet — probably waiting on you" />}
+            {s.attention && <span className="dot attention" title="Time to take a look — click to acknowledge" />}
+            <button className="tab-close" data-move-session={s.id} title="Move terminal to another window" aria-label="Move terminal to another window" onClick={() => useStore.setState({ moveSessionId: s.id })}>⇥</button>
             {!s.attention && s.unseen && <span className="dot unseen" title="New output" />}
             {s.status === 'exited' && <span className="tab-dead">exited</span>}
             <button className="tab-close" data-popout={s.id} title={s.detached ? 'Show popped-out terminal' : 'Pop out terminal'}
               onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); void useStore.getState().detachSession(s.id) }}>↗</button>
             <button
               className="tab-close"
-              title="Close (Ctrl+Shift+W)"
+              title={shortcutLabel("Close (Ctrl+Shift+W)")}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation()
@@ -181,7 +214,7 @@ export function TabBar(): React.JSX.Element {
             </button>
           </div>
         ))}
-        <button className="tab-new" title="New chat or terminal… (Ctrl+Shift+T)" aria-label="New chat or terminal" onClick={() => setNewSessionOpen(true)}>
+        <button className="tab-new" title={shortcutLabel("New chat or terminal… (Ctrl+Shift+T)")} aria-label="New chat or terminal" onClick={() => setNewSessionOpen(true)}>
           +
         </button>
       </div>

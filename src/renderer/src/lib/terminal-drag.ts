@@ -11,6 +11,7 @@ export function beginTerminalDrag(event: ReactPointerEvent<HTMLElement>, id: str
   let moved = false
   handle.setPointerCapture(pointerId)
   const finish = (): void => {
+    window.buddy.workspace.drag(id)
     document.body.classList.remove('is-terminal-dragging')
     window.removeEventListener('pointermove', move)
     window.removeEventListener('pointerup', up)
@@ -22,7 +23,11 @@ export function beginTerminalDrag(event: ReactPointerEvent<HTMLElement>, id: str
   const move = (e: PointerEvent): void => {
     if (e.pointerId !== pointerId) return
     if (Math.hypot(e.clientX - startX, e.clientY - startY) > 12) moved = true
-    if (moved) document.body.classList.add('is-terminal-dragging')
+    if (moved) {
+      document.body.classList.add('is-terminal-dragging')
+      const outside = e.clientX < 0 || e.clientX > window.innerWidth || e.clientY < 0 || e.clientY > window.innerHeight
+      window.buddy.workspace.drag(id, outside ? { x: e.screenX, y: e.screenY } : undefined)
+    }
   }
   const cancel = (): void => finish()
   const key = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.preventDefault(); finish() } }
@@ -31,7 +36,7 @@ export function beginTerminalDrag(event: ReactPointerEvent<HTMLElement>, id: str
     finish()
     if (!moved) return
     if (e.clientX < 0 || e.clientX > window.innerWidth || e.clientY < 0 || e.clientY > window.innerHeight) {
-      void useStore.getState().detachSession(id, { x: e.screenX, y: e.screenY })
+      void window.buddy.workspace.drop(id, { x: e.screenX, y: e.screenY }).catch(error => useStore.getState().notify(error.message))
     } else {
       const target = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-session-id]')?.dataset.sessionId
       const { sessions, moveSession } = useStore.getState()

@@ -46,5 +46,9 @@ linux:
   category: Utility
 
 mac:
-  target: [dmg]
+  icon: build/icon.png
+  target:
+    - target: dmg
+    - target: zip
   category: public.app-category.developer-tools
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}

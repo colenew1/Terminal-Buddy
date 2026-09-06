@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   Catalog,
   ChatEntry,
@@ -14,7 +14,7 @@ import type {
   Settings,
   ShellDef,
   Workspace,
-  PopoutInit, Pos
+  AssistantProfile, PopoutInit, Pos, TransferState, TransferArrival, LauncherLibrary, WorkspacePreset
 } from '@shared/types'
 
 type Unsub = () => void
@@ -26,7 +26,12 @@ function on<A extends unknown[]>(channel: string, cb: (...args: A) => void): Uns
 }
 
 const api = {
+  platform: process.platform,
   popout: {
+    attention: (id: string, value: boolean): void => ipcRenderer.send('popout:attention', id, value),
+    seen: (id: string): void => ipcRenderer.send('popout:seen', id),
+    onAttention: (cb: (value: boolean) => void): Unsub => on('popout:attention', cb),
+    onSeen: (cb: (id: string) => void): Unsub => on('popout:seen', cb),
     open: (id: string, point?: Pos): Promise<void> => ipcRenderer.invoke('popout:open', id, point),
     init: (id: string): Promise<void> => ipcRenderer.invoke('popout:init', id),
     dock: (id: string): void => ipcRenderer.send('popout:dock', id),
@@ -45,13 +50,14 @@ const api = {
   },
 
   pty: {
+    link: (id: string, chat: ChatEntry): Promise<SessionInfo> => ipcRenderer.invoke('pty:link', id, chat),
     create: (spec: SessionSpec): Promise<SessionInfo> => ipcRenderer.invoke('pty:create', spec),
     write: (id: string, data: string, broadcast = false): void => ipcRenderer.send('pty:write', id, data, broadcast),
     submit: (id: string, data: string): Promise<void> => ipcRenderer.invoke('pty:submit', id, data),
     resize: (id: string, cols: number, rows: number): void => ipcRenderer.send('pty:resize', id, cols, rows),
     kill: (id: string): void => ipcRenderer.send('pty:kill', id),
     rename: (id: string, title: string): void => ipcRenderer.send('pty:rename', id, title),
-    onData: (cb: (id: string, data: string) => void): Unsub => on('pty:data', cb),
+    onData: (cb: (id: string, data: string, seq: number) => void): Unsub => on('pty:data', cb),
     onExit: (cb: (id: string, code: number) => void): Unsub => on('pty:exit', cb),
     onInfo: (cb: (id: string, patch: { pid: number }) => void): Unsub => on('pty:info', cb),
     probeAgents: (): Promise<Record<string, 'claude' | 'codex' | null>> =>
@@ -65,17 +71,42 @@ const api = {
     onProgress: (cb: (p: ScanProgress) => void): Unsub => on('catalog:progress', cb)
   },
 
+  assistants: {
+    save: (profile: AssistantProfile): Promise<Settings> => ipcRenderer.invoke('assistants:save', profile),
+    remove: (id: string): Promise<Settings> => ipcRenderer.invoke('assistants:remove', id)
+  },
+
   settings: {
+    onChanged: (cb: (s: Settings) => void): Unsub => on('settings:changed', cb),
     get: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
     set: (s: Settings): Promise<Settings> => ipcRenderer.invoke('settings:set', s)
   },
 
   workspace: {
+    move: (id: string, target: string): Promise<void> => ipcRenderer.invoke('workspace:move', id, target),
+    combine: (): Promise<void> => ipcRenderer.invoke('workspace:combine'),
+    drop: (id: string, point: Pos): Promise<void> => ipcRenderer.invoke('workspace:drop', id, point),
+    drag: (id: string, point?: Pos): void => ipcRenderer.send('workspace:drag', id, point),
+    transferReply: (token: string, state: TransferState): void => ipcRenderer.send('workspace:transferReply', token, state),
+    onTransferRequest: (cb: (token: string) => void): Unsub => on('workspace:transferRequest', cb),
+    onTransferArrive: (cb: (sessions: TransferArrival[], recovery: PersistedSession[]) => void): Unsub => on('workspace:transferArrive', cb),
+    onTransferRemove: (cb: (ids: string[]) => void): Unsub => on('workspace:transferRemove', cb),
+    onTransferEnd: (cb: () => void): Unsub => on('workspace:transferEnd', cb),
+    onTransferHover: (cb: (over: boolean) => void): Unsub => on('workspace:transferHover', cb),
     get: (): Promise<Workspace> => ipcRenderer.invoke('workspace:get'),
     set: (w: Workspace): Promise<void> => ipcRenderer.invoke('workspace:set', w),
     saveSync: (w: Workspace): string | null => ipcRenderer.sendSync('workspace:saveSync', w),
     prepareRestore: (sessions: PersistedSession[]): Promise<RestoreItem[]> => ipcRenderer.invoke('workspace:prepareRestore', sessions),
     restoreSpec: (session: PersistedSession): Promise<SessionSpec> => ipcRenderer.invoke('workspace:restoreSpec', session)
+  },
+
+  library: {
+    get: (): Promise<LauncherLibrary> => ipcRenderer.invoke('library:get'),
+    pin: (chat: ChatEntry, pinned: boolean): Promise<LauncherLibrary> => ipcRenderer.invoke('library:pin', chat, pinned),
+    rememberFolder: (path: string): Promise<LauncherLibrary> => ipcRenderer.invoke('library:folder', path),
+    savePreset: (preset: Omit<WorkspacePreset, 'id'>): Promise<LauncherLibrary> => ipcRenderer.invoke('library:savePreset', preset),
+    deletePreset: (id: string): Promise<LauncherLibrary> => ipcRenderer.invoke('library:deletePreset', id),
+    onChanged: (cb: (value: LauncherLibrary) => void): Unsub => on('library:changed', cb)
   },
 
   integration: {
@@ -95,11 +126,16 @@ const api = {
   },
 
   clipboard: {
+    filePath: (file: File): string => webUtils.getPathForFile(file),
     read: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
-    write: (text: string): void => ipcRenderer.send('clipboard:write', text)
+    write: (text: string): Promise<void> => ipcRenderer.invoke('clipboard:write', text)
   },
 
   app: {
+    newWindow: (): Promise<string> => ipcRenderer.invoke('app:newWindow'),
+    windows: (): Promise<{ id: string; label: string; terminals: number; current: boolean }[]> => ipcRenderer.invoke('app:windows'),
+    focusWindow: (id: string): Promise<void> => ipcRenderer.invoke('app:focusWindow', id),
+    onWindowsChanged: (cb: () => void): Unsub => on('app:windowsChanged', cb),
     pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
     paths: (): Promise<{
       home: string

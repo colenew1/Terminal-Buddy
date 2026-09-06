@@ -44,9 +44,9 @@ export default function RestoreSessionDialog({ items }: { items: RestoreItem[] }
         </button>
         {!choosing && <button className="btn" data-restore-choose disabled={busy || !available.length} onClick={() => setChoosing(true)}>Choose chats…</button>}
         <button className="btn" data-restore-saved disabled={busy} onClick={() => useStore.getState().findSavedChats()}>Saved chats…</button>
-        <button className="btn" data-restore-fresh disabled={busy} onClick={() => void useStore.getState().startFresh()}>Start fresh</button>
+        <button className="btn" data-restore-fresh disabled={busy} onClick={() => void useStore.getState().startFresh()}>Open something else…</button>
       </div>
-      <small className="restore-footnote">Start fresh clears this reopen list, not your saved conversation history.</small>
+      <small className="restore-footnote">Open something else to choose a base terminal, folder, or new chat. This clears the reopen list; saved conversations stay available.</small>
     </dialog>
   )
 }

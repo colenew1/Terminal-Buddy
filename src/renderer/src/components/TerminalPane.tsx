@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import FileDropTarget from './FileDropTarget'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
@@ -23,7 +24,6 @@ interface Props {
 export default function TerminalPane({ session, visible, interactive }: Props): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const id = session.id
-
   // Read live values from the store inside callbacks rather than closing over
   // them, so the terminal never has to be rebuilt when settings change.
   const settings = useStore((s) => s.settings)
@@ -67,7 +67,7 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
     register(id, { term, fit, search, container: host })
 
     term.onData((data) => {
-      if (getTerm(id)?.detached || isTerminalReply(data)) return
+      if (useStore.getState().transferBusy || getTerm(id)?.detached || isTerminalReply(data)) return
       // xterm also emits terminal-protocol replies. Those are not user input.
       const userInput = /^[^\x00-\x1f\x7f]/.test(data) || data === '\r' || data.startsWith('\x1b[200~')
       if (useStore.getState().broadcast) {
@@ -86,6 +86,8 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
     // preventDefault, which is what used to swallow Ctrl+V as a raw 0x16.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
+      const s = useStore.getState()
+      if (e.key === 'Escape' && s.focusedSessionId && !s.settingsOpen && !s.paletteOpen && !s.newSessionOpen && !s.pendingCloseId && !s.walkthroughOpen && !s.linkSessionId) return false
       if (matchShortcut(e) !== null) return false
       const clip = matchClipboard(e)
       if (clip === 'paste' || clip === 'cut') return false
@@ -203,7 +205,11 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
       onMouseDown={() => useStore.getState().locked && setActive(id)}
       onContextMenu={onContextMenu}
     >
-      <div className="pane-host" ref={hostRef} />
+      <FileDropTarget enabled={interactive} canPaste={session.status !== 'exited'}
+        focus={() => getTerm(id)?.term.focus()}
+        paste={text => { setActive(id); getTerm(id)?.term.paste(text) }}>
+        <div className="pane-host" ref={hostRef} />
+      </FileDropTarget>
       {session.status === 'exited' && (
         <div className="pane-exit">
           <span>

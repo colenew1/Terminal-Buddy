@@ -13,9 +13,9 @@ Running several coding agents at once means keeping track of their terminals, pr
 
 Terminal Buddy puts the **live terminal first**, including trust prompts, approval menus, errors, and slash commands. The terminal is the only place to type or paste dictation; Enter, arrows, Escape, and Ctrl+C go directly to the running program. Nothing automatically answers approval questions.
 
-Click the title's pencil to give an instance a local name such as **Praveen's persona**. Labels persist in the workspace without modifying Claude or Codex history files. Tabs, grid cards, and World inhabitants use the same name.
+Click the title's pencil to give an instance a local name such as **Praveen's persona**. Labels persist in the workspace without modifying Claude or Codex history files. Tabs and grid cards use the same name.
 
-**Desktop notifications** are on by default and configurable in Settings. After submitted input, eight seconds of output silence produces a “may need you” alert; an actual terminal-process exit is labeled separately. Silence is a heuristic, not proof of task completion. Pauses are rate-limited to one notification per terminal every 30 seconds. Clicking an alert opens its live terminal. Settings includes a test button; Windows notification permissions and Do not disturb still apply. Monitoring runs in the main process, including while the app is minimized.
+**Desktop notifications and chimes** are off by default, including the one-time migration from older default-on releases. Opt in through Settings. After submitted input, eight seconds of output silence produces an “output paused” alert; an actual terminal-process exit is labeled separately. Silence is a heuristic, not proof of task completion. Pauses are rate-limited to one notification per terminal every 30 seconds. Clicking an alert opens its live terminal. Settings includes a test button; Windows notification permissions and Do not disturb still apply. Monitoring runs in the main process, including while the app is minimized.
 
 Three things it fixes:
 
@@ -27,29 +27,47 @@ It is a personal tool, published in case it's useful. No telemetry, no account, 
 
 ## One terminal, no transcript view
 
-The **+** button opens a chooser without creating a terminal. Start a new Claude chat, a new Codex chat, or a plain terminal; every fresh chooser defaults to your home directory (`C:\Users\Owner` on this PC). Choose a project folder first when needed. **Resume saved chat** opens the catalog directly, without leaving an unwanted terminal behind. The keyboard shortcut, World New button, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
+Fresh launches, new windows, **Open something else…** in recovery, and every **+** open a chooser without creating a terminal. Choose **Pick a chat** to browse saved conversations, **Start a new chat** to choose Claude, Codex, or a configured assistant, **Open folder…** to select the working folder, or **Start a base terminal** to launch a plain terminal. Expand **Recent folders, pinned chats & presets** for shortcuts. Pin or unpin conversations in the catalog with **☆ Pin**; pinned chats validate their saved history before reopening. Favorites and recent folders are shared across windows and saved for the next launch. Each fresh chooser starts in your home directory; selecting a folder updates it for the next chat or terminal. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
 
 Each instance shows the agent's native terminal output. Terminal Buddy enables truecolor for its child terminals, rather than inheriting a launcher's `NO_COLOR` setting. Colors come from the running program and the selected terminal theme; output is not rewritten into chat bubbles.
 
-A colored header reports **Output active**, **Opening**, **Quiet**, **May need you**, or **Exited**. These describe observed activity, not confirmed agent completion. There is no separate composer or Send button. Pasted text uses the terminal's paste handling, including bracketed paste when enabled by the running program; Terminal Buddy does not append Enter. Multiline editing and menu behavior belong to the shell or agent.
+A colored header reports **Output active**, **Opening**, **Quiet**, **Take a look**, or **Exited**. These describe observed activity, not confirmed agent completion. There is no separate composer or Send button. Pasted text uses the terminal's paste handling, including bracketed paste when enabled by the running program; Terminal Buddy does not append Enter. Multiline editing and menu behavior belong to the shell or agent.
 
 Saved chats remain in the catalog and can be resumed or exported as Markdown. Dropping one onto an empty pane replaces that terminal in place; existing input and messages protect occupied panes. Background history reading is used only for tool/MCP activity and occupancy tracking, never as a separate session interface.
 
 ## Features
 
+**Separate workspace windows**
+
+Click **⊞ New window** in the title bar, use **Ctrl+Shift+N** (**Cmd+Shift+N** on Mac), or choose **New workspace window** in the command palette. Each new window opens the four-option chooser and supports its own terminals, tabs, grid, names, and project folders. The arrow beside New window lists your workspaces and brings the selected window forward, including hidden windows. The tray menu also offers New window.
+
+Terminal input, broadcast typing, activity, and pop-outs stay within their owning workspace. Preferences and the saved-chat catalog are shared. Closing one workspace stops only its terminals and closes its pop-outs; other windows keep running. If Close to tray is enabled, closing hides the workspace and keeps its terminals alive. Quit from the tray or Mac application menu to exit all windows.
+
+On the next launch, windows that were open when you quit reopen with their own recovery choosers, saved names, and layouts. Explicitly closing a workspace removes it from that reopening list; closing the last workspace keeps it for the next launch. Existing single-window saves continue to work. Use **⇥** on a tab or pane to move it to another window, or drag its header outside the current window onto another visible workspace. Dropping outside every workspace still creates a pop-out. Moves keep the running process, terminal output, name, and recovery link; moving a popped-out terminal docks it into the destination. Choose **Workspace windows → Combine all windows here** to collect the terminals and close the emptied windows. The destination keeps its layout. Finish pending recovery choices first; a move that would exceed 16 terminals is rejected before changing any workspace.
+
+**Custom assistants and models**
+
+Open **Settings → Assistants** or **+ → Start a new chat → Add or edit assistants…**. Enter a name and the launch command for any installed terminal tool, including its model flags if needed. **Use Kimi example** fills in `Kimi` and `kimi`, the [official CLI launch command](https://moonshotai.github.io/kimi-code/en/reference/kimi-command). Click **Add assistant** to save. Install and sign in to the tool in a terminal first. Each command runs in the folder selected in the chooser, using the selected shell. Use the quoting and flags appropriate to that shell and tool.
+
+Profiles are shared across windows and support edits, removal, presets, pop-outs, and live moves. Editing a command affects subsequent launches; removing a profile leaves running terminals alone and makes its saved presets/recovery entries unavailable. Custom assistants manage their own chat history inside their CLI. Their recovery rows explicitly start fresh sessions; the saved-chat catalog, history linking, and skill integration remain specific to Claude and Codex.
+
+**Workspace presets**
+
+Open **Workspace windows → Workspace presets…** (also available from the chooser or command palette). Name the current setup to save its folders, shells, assistant choices, and layout. Opening a preset adds fresh sessions to the current window; it never replays terminal input or resumes the original conversations. Missing folders or shells are reported before launch. If a process launch fails midway, already opened sessions remain and the error offers a retry for the failed terminal. Presets can be removed individually.
+
 **Pop-out terminals**
 
-Drag a tab or a pane's header outside the app to detach it, or click its ↗ button. The separate Windows window can be maximized, snapped, or moved to another monitor. Drag its **Drag to dock** handle back onto the highlighted strip in the main window, click **Dock back**, or close the pop-out to return it. Native title-bar dragging also docks when released over the strip. Escape cancels handle drags. A placeholder keeps the original grid slot and provides Show window / Dock back controls.
+Drag a tab or a pane's header outside the app to detach it, or click its ↗ button. The separate window can be maximized or moved to another monitor. Drag its **Drag to dock** handle back onto the highlighted strip in its original workspace, click **Dock back**, or close the pop-out to return it. Native title-bar dragging also docks when released over the strip. Escape cancels handle drags. A placeholder keeps the original grid slot and provides Show window / Dock back controls.
 
-Detaching never launches another shell or resumes another chat: the same PTY stays running. A bounded headless xterm screen provides an ordered snapshot including colors, scrollback, cursor state and alternate-screen menus; only the detached window controls its size while it is out. Terminal protocol queries are answered by one parser, not by both views. Input/pasted dictation still uses the native terminal with no automatic Enter. A detached window has no broadcast mode; typing there targets that terminal only. Main-window broadcast still explicitly targets the whole fleet.
+Detaching never launches another shell or resumes another chat: the same PTY stays running. A bounded headless xterm screen provides an ordered snapshot including colors, scrollback, cursor state and alternate-screen menus; only the detached window controls its size while it is out. Terminal protocol queries are answered by one parser, not by both views. Input/pasted dictation still uses the native terminal with no automatic Enter. A detached window has no broadcast mode; typing there targets that terminal only. Workspace broadcast explicitly targets that window’s terminals, including its pop-outs.
 
-Closing a pop-out (including Ctrl+Shift+W) docks it instead of stopping its process. To end a terminal, close its pane in the main workspace. Closing the entire app closes all its windows and saves every session once; on the next launch, recovered sessions return to the main workspace rather than automatically opening extra windows. Pop-out placement is not persisted. Theme/font changes and local name changes are reflected in open pop-outs.
+Closing a pop-out (including Ctrl+Shift+W) docks it instead of stopping its process. To end a terminal, close its pane in its workspace. Quitting the entire app closes all windows and saves every workspace; on the next launch, recovered sessions return to their own workspace rather than reopening pop-outs. Pop-out placement is not persisted. Theme/font changes and local name changes are reflected in open pop-outs.
 
 **Pick up where you left off**
 
-After exiting the entire app, the next launch asks whether to reopen all available sessions, choose individual ones, browse saved chats, or start fresh. Names, folders, ordering, active pane, grid proportions and World positions are saved continuously and flushed on normal exit. Closing the app while the chooser is open keeps the previous recovery snapshot. Start fresh clears the reopen list, never the agents' conversation history.
+After exiting the entire app, the next launch asks whether to reopen all available sessions, choose individual ones, browse saved chats, or start fresh. Names, folders, ordering, active pane, grid proportions are saved continuously and flushed on normal exit. Closing the app while the chooser is open keeps the previous recovery snapshot. Open something else clears the reopen list and offers a base terminal, folder, or new chat; saved conversation history stays available.
 
-Chats imported from the catalog record their exact Claude/Codex session ID. New Claude chats launched by the chooser receive an explicit ID and become resumable once Claude writes their history. Missing folders/files and known agents without a linked ID are flagged, not silently replaced with another chat. New Codex chats and agents started manually in a shell need to be selected from Saved chats; there is no reliable process-to-session link for them yet. Legacy workspaces reopen terminal folders only. Changing conversations inside a CLI (for example `/resume` or `/clear`) does not update the recorded link; use the catalog to reopen the desired conversation as a new instance.
+Chats imported from the catalog record their exact Claude/Codex session ID. New Claude chats launched by the chooser receive an explicit ID and become resumable once Claude writes their history. Missing folders/files and known agents without a linked ID are flagged, not silently replaced with another chat. For new Codex chats or agents started manually, click **Link chat** in the terminal header and choose the exact saved conversation. Buddy validates its ID against the history file without restarting the live process. **Linked** reviews or changes that association. Changing conversations inside a CLI (for example `/resume` or `/clear`) does not automatically update the link; select the new conversation with this control. Workspace writes are atomic, with a last-known-good `.bak` fallback for corrupt or invalid snapshots.
 
 This is conversation recovery, not a background terminal daemon: closing the app stops running processes. Unsent input, arbitrary shell state and scrollback are not restored, and previous tasks are not automatically resubmitted. Agent trust/approval prompts remain native terminal interactions. Disable the startup prompt in Settings if desired.
 
@@ -60,11 +78,15 @@ This is conversation recovery, not a background terminal daemon: closing the app
 - Editable header labels, recognizable critters, and smoothly resizable grid rows and columns
 - Native ANSI colors and a visible activity label
 
-**World view**
-- Every live terminal becomes a movable inhabitant, with motion reserved for meaningful state
-- Working agents spin; agents that may need you wave; click one to open its existing live terminal in Tabs
-- Tools observed in the live transcript orbit as satellites, with MCP servers identified separately
-- The wording is deliberately literal: observed use is shown now; live connection health will only appear once an agent reports it authoritatively
+**Focus and attention**
+
+Use ⛶ or double-click empty header space to fill the main area with one terminal. Escape restores the exact prior grid without restarting any terminal. In focus mode, Escape is reserved for returning to the layout.
+
+A faint amber border pulses on a pane and its tab after an identified agent's output pauses, or a used terminal exits. The light stays on through subsequent output until you click/open the terminal; no reply is required to dismiss it. Pop-outs share the same cue and acknowledgement. Calm mode and the system reduced-motion preference use a steady border. This indicates something to inspect, not confirmed completion or an approval request. World view has been removed; old World workspaces open in Grid with their sessions preserved.
+
+**First-run walkthrough**
+
+A seven-step, skippable tour highlights the app's controls on first launch. Back/Next, Skip, and Escape are supported; completion is saved. A pending recovery chooser is shown first. Replay it from **Settings → Getting started → Replay walkthrough**. The tour never sends commands, launches an agent, or changes your layout.
 
 **The buddy**
 - A small creature in the title bar whose mood is real state, not decoration: **asleep** with nothing open, **calm** when all is quiet, **working** while output streams, and visibly **agitated** the moment a pane starts waiting on you. Click it to jump straight to whichever pane that is.
@@ -176,9 +198,9 @@ Nothing is guessed; both CLIs write structured logs.
 | Title | `ai-title` records, else first real prompt | first real user message |
 | Folder | `cwd` on user records | `session_meta.payload.cwd` |
 
-Both stores are large — around 300 MB here — so every file is parsed once and cached against its size and mtime. The first scan takes a few seconds with a progress bar; later launches are instant. Parsing streams line by line and only runs `JSON.parse` on lines that could possibly match, so a 20 MB transcript costs a read, not a heap.
+Both stores are large — around 300 MB here — so every file is parsed once and cached against its size and mtime. The first scan takes a few seconds with a progress bar; later launches reuse unchanged entries. The catalog rescans on each workspace launch, when the app regains focus, and when the catalog is reopened. Chats appear most recently used first, using timestamps recorded in the conversation (file modification time is the fallback). Custom `CODEX_HOME` and `CLAUDE_CONFIG_DIR` locations and Codex archived sessions are included. Parsing streams line by line and only runs `JSON.parse` on lines that could possibly match, so a 20 MB transcript costs a read, not a heap.
 
-Sessions whose only prompts are machinery (sub-agent runs, `/exit`, injected `AGENTS.md` or caveat blocks) are flagged **internal** and hidden behind a toggle — but a session Claude gave a real title is always kept, even if it opens with a caveat block.
+Sessions whose only prompts are machinery (sub-agent runs, `/exit`, injected `AGENTS.md` or caveat blocks) are flagged **internal** and included by default; use the internal toggle to hide them — but a session Claude gave a real title is always kept, even if it opens with a caveat block.
 
 The resume commands are **templates** in Settings:
 
@@ -229,6 +251,8 @@ A click on an unfocused pane only focuses it. The next click positions.
 
 ## Dragging things onto terminals
 
+Drop local files from Explorer or Finder onto a terminal, including a pop-out, then choose **Copy as Path** for quoted, absolute paths on the plain-text clipboard. Previous image clipboard data is cleared, including when the dropped file is an image. **Paste path** inserts those paths into the terminal without pressing Enter. Multiple files and paths with spaces are supported.
+
 Grab any row in the catalog and drop it on a pane. Buddy works out what is actually running in each terminal first — by walking the process tree under each shell, not by guessing from output — so the highlighting tells the truth:
 
 | Dropping | On an idle prompt | On a matching agent | On the other agent |
@@ -258,7 +282,7 @@ The grid is locked by default, because a stray drag while you are working should
 - double-click a divider to balance its neighbors, or focus it and use arrow keys for fine adjustments
 - proportions persist across restarts and layout switches; changing the grid's row/column count uses equal sizes for the changed axis
 
-Dividers keep neighboring tracks at least 160px wide or 110px high when space allows. The old whole-cell corner sizing is replaced by a regular grid; terminal order, names, running processes, and World positions are preserved.
+Dividers keep neighboring tracks at least 160px wide or 110px high when space allows. The old whole-cell corner sizing is replaced by a regular grid; terminal order, names, and running processes are preserved.
 
 Movement is animated with a FLIP pass: every pane's position is measured before and after the reflow, then each one starts at its old spot and glides to the new one. Without it a reorder teleports and it's genuinely hard to see what went where. Calm mode turns it off.
 
@@ -280,26 +304,64 @@ What does work, and covers most of the need:
 ## Limitations
 
 - **Processes don't survive a restart.** Closing the app kills its PTYs. The startup chooser can resume explicitly linked conversations in new processes; it cannot continue an interrupted shell command. Unlinked conversations are available through the catalog.
-- Windows is the target. The code paths for macOS/Linux exist (shell detection, packaging targets) but are untested; the Explorer integration is Windows-only by nature.
+- macOS has platform-specific shell, agent detection, keyboard, window controls, menu bar, and Dock support. Apple Silicon and Intel builds are checked by `.github/workflows/macos.yml`; run that workflow before treating a Mac release as verified. Explorer integration and the installed `buddy` command remain Windows-only. Linux packaging is experimental.
 - Skills are catalogued and searchable, not editable. "Type `/name`" writes the invocation into the focused terminal.
 
 ## Development
+
+### Updating Codex inside Terminal Buddy
+
+Click **+ → Start a base terminal** to get a normal shell prompt. You can install and update command-line tools there. Close running Codex CLI sessions before updating, then open a new Codex chat afterwards. For an npm installation:
+
+```sh
+npm install -g @openai/codex@latest
+codex --version
+```
+
+Use the update method matching your original installation; see the [official Codex CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli). This updates the CLI; the desktop app has its own updater. If Terminal Buddy cannot open even a **Start a base terminal** pane, use PowerShell/Windows Terminal or macOS Terminal to update. Launch errors offer **Retry**, **Choose another shell**, and **Copy error details**. Selecting another shell applies to that retry. The chooser keeps the actual launch error visible; check **Settings → Terminal → Default shell** if it points to a missing shell. A native terminal-module error requires a Terminal Buddy reinstall/build for the correct OS and processor, rather than a Codex update.
+
+### Building for macOS
+
+On a Mac, use Node.js 22 and install dependencies there (do not copy `node_modules` from Windows). Login shells load the Mac user's shell configuration, including PATH setup for Homebrew, npm, and version managers. Finder/Dock launches fall back to the account's configured shell when `SHELL` is missing.
+
+```sh
+npm ci
+npm run typecheck
+npm run test:platform
+npm run dist:mac -- --publish never
+```
+
+This creates a DMG and ZIP in `release/` for the Mac's processor. Apple Silicon uses `arm64`; Intel uses `x64`. Build on each corresponding architecture so the native PTY dependency matches. The **macOS builds** GitHub Actions workflow does this on both architectures, runs the platform/unit checks, and tests each packaged app by opening a shell, detecting a mock agent, and exercising clipboard/interrupt keys. Download its build artifacts after a successful run. These test artifacts are not Developer ID signed or notarized; public distribution needs Apple signing credentials and notarization configured with [electron-builder](https://www.electron.build/code-signing-mac.html).
+
+On Mac, use **Cmd+C / Cmd+V** to copy/paste and **Control+C** to interrupt. App actions accept **Cmd+Shift** (e.g. Cmd+Shift+T); **Control+Tab** changes panes. The application menu provides Quit/Hide and window actions, and clicking the Dock icon reveals a hidden window. Windows Explorer settings are hidden on Mac. To open a folder from macOS Terminal after installing the app:
+
+```sh
+open -a "Terminal Buddy" --args "$PWD"
+```
+
+### Commands
 
 ```bash
 npm run dev         # electron-vite dev server with HMR
 npm run typecheck   # tsc over main, preload and renderer
 npm run build       # compile to out/
-npm test            # typecheck + build + all five suites below
+npm run test:platform # platform logic checks on any host
+npm run test:platform-app # real PTY, process detection, and keyboard checks
+npm run test:windows # ownership, live moves, combining, pop-outs, and recovery
+npm run test:launcher # pinned chats, presets, recent folders, and launch recovery
+npm run test:assistants # custom CLI profiles, model flags, presets, moves, and recovery
+npm test            # typecheck + build + regression suites
 ```
 
-The tests drive the **real application**, not mocks. Electron runs in disposable profiles, and the feed fixture gets a disposable home folder, so the suite never resets your actual workspace or writes into your real agent history.
+UI tests drive the **real application** with isolated profiles and local mock agents where needed; unit tests cover persistence, notification timing, and terminal transport. Electron runs in disposable profiles, and the feed fixture gets a disposable home folder, so the suite never resets your actual workspace or writes into your real agent history.
 
 | Script | What it proves |
 | --- | --- |
 | `npm run test:smoke` | Boots the app over the Chrome DevTools Protocol, spawns a pty and round-trips `echo` through it, confirms the catalog indexed real skills/chats/projects, toggles the sidebar and grid, saves a screenshot. |
-| `npm run test:feed` | Writes isolated Claude and Codex transcript fixtures, verifies live tailing and readable tool calls, and proves Codex MCP use appears as a World satellite. |
+| `npm run test:feed` | Writes isolated Claude and Codex transcript fixtures, verifies live tailing and readable tool calls, including Codex MCP server names. |
 | `npm run test:grid` | Opens 6 terminals, tiles them, checks every pane has real geometry and a unique critter, and proves ordinary shell prompts do not raise false attention alerts. |
-| `npm run test:world` | Opens 5 terminals, checks spatial geometry, hidden-terminal isolation, conversation opening and drag rearrangement, then captures the World view. |
+| `npm run test:features` | Verifies first-run/replay/skip walkthrough, legacy layout migration, attention acknowledgement, focus/Escape, and explicit recovery linking. |
+| `npm run test:settings` | Verifies opt-in alert migration, saved walkthrough preferences, and corrupt-workspace fallback. |
 | `npm run test:registry` | Round-trips the generated `.reg` through the real `reg.exe` under a scratch key (paths with spaces and all), then deletes it. |
 
 The disposable profile also gives test runs their own single-instance lock, so your installed copy can stay open.

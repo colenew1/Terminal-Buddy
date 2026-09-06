@@ -8,10 +8,10 @@ import { setTimeout as sleep } from 'node:timers/promises'
 const root = mkdtempSync(join(tmpdir(), 'buddy-popout-')), profile=join(root,'profile'), project=join(root,'project')
 mkdirSync(profile);mkdirSync(project)
 const launches=join(root,'launches.txt'), mock=join(root,'agent.mjs'), chatId='11111111-1111-4111-8111-111111111111'
-writeFileSync(mock, `import {appendFileSync} from 'node:fs';appendFileSync(${JSON.stringify(launches)},process.pid+'\\n');process.stdin.setRawMode(true);process.stdin.resume();let line='';console.log('\\x1b[36mSAME_PROCESS:'+process.pid+'\\x1b[0m');console.log('Would you like to trust this folder? yes/no');let n=0;setInterval(()=>console.log('TICK:'+ ++n),350);process.stdin.on('data',data=>{const s=data.toString();if(s.startsWith('\\x1b[')&&!s.startsWith('\\x1b[200~'))return;for(const c of s.replace(/\\x1b\\[(200|201)~/g,'')){if(c==='\\r'){console.log('ANSWER:'+line);line=''}else{line+=c;process.stdout.write(c)}}});`)
+writeFileSync(mock, `import {appendFileSync} from 'node:fs';appendFileSync(${JSON.stringify(launches)},process.pid+'\\n');process.stdin.setRawMode(true);process.stdin.resume();let line='';console.log('\\x1b[36mSAME_PROCESS:'+process.pid+'\\x1b[0m');console.log('Would you like to trust this folder? yes/no');let n=0;const tick=()=>console.log('TICK:'+ ++n);let timer=setInterval(tick,350);process.stdin.on('data',data=>{const s=data.toString();if(s==='__PAUSE__'){clearInterval(timer);console.log('PAUSED');return}if(s==='__RESUME__'){timer=setInterval(tick,350);return}if(s.startsWith('\\x1b[')&&!s.startsWith('\\x1b[200~'))return;for(const c of s.replace(/\\x1b\\[(200|201)~/g,'')){if(c==='\\r'){console.log('ANSWER:'+line);line=''}else{line+=c;process.stdout.write(c)}}});`)
 const history=join(project,chatId+'.jsonl')
 writeFileSync(history,JSON.stringify({type:'user',sessionId:chatId,cwd:project,message:{content:'Saved test'}})+'\n')
-writeFileSync(join(profile,'settings.json'),JSON.stringify({reduceMotion:true,defaultShellId:'cmd',trayIcon:false,closeToTray:false,desktopNotifications:false,claudeResumeCommand:`"${process.execPath}" "${mock}" {id}`}))
+writeFileSync(join(profile,'settings.json'),JSON.stringify({walkthroughVersion:1,reduceMotion:true,defaultShellId:'cmd',trayIcon:false,closeToTray:false,desktopNotifications:false,claudeResumeCommand:`"${process.execPath}" "${mock}" {id}`}))
 writeFileSync(join(profile,'workspace.json'),JSON.stringify({layout:'grid',sessions:[{cwd:project,shellId:'cmd',title:'Persistent buddy',resume:{agent:'claude',id:chatId,path:history}},{cwd:project,shellId:'cmd',title:'Other pane'}]}))
 const child=spawn(process.env.BUDDY_EXE??'node_modules/electron/dist/electron.exe',[
   ...(process.env.BUDDY_EXE?[]:['./out/main/index.js']),'--remote-debugging-port=9246','--user-data-dir='+profile
@@ -75,6 +75,15 @@ try{
   check('large pop out fits its native terminal',await pop.ev("(()=>{const h=document.querySelector('.detached-host').getBoundingClientRect(),t=document.querySelector('.xterm-screen').getBoundingClientRect();return t.width>1100 && t.width<h.width && t.height<h.height})()"))
   const shot=await pop.send('Page.captureScreenshot',{format:'png'});writeFileSync(join(tmpdir(),'terminal-buddy-popout.png'),Buffer.from(shot.data,'base64'))
   await pop.send('Emulation.clearDeviceMetricsOverride')
+  await pop.ev(`window.buddy.pty.write(${JSON.stringify(detachedId)},'__PAUSE__')`)
+  await until(pop,"document.querySelector('.detached-app').classList.contains('needs-look')")
+  check('pop-out gets the same attention border as its original pane',await main.ev("document.querySelector('.cell').classList.contains('needs-look')"))
+  check('Calm mode keeps attention visible without blinking',await pop.ev("getComputedStyle(document.querySelector('.detached-app'),'::after').animationName==='none'"))
+  const footer=await pop.ev("(()=>{const r=document.querySelector('.detached-status').getBoundingClientRect();return{x:r.x+20,y:r.y+r.height/2}})()")
+  await mouse(pop,'mousePressed',footer.x,footer.y);await mouse(pop,'mouseReleased',footer.x,footer.y)
+  await until(pop,"!document.querySelector('.detached-app').classList.contains('needs-look')")
+  check('clicking a pop-out clears both attention indicators without typing',await main.ev("!document.querySelector('.cell').classList.contains('needs-look')"))
+  await pop.ev(`window.buddy.pty.write(${JSON.stringify(detachedId)},'__RESUME__')`)
   await dock()
   check('Dock back removes only the extra window',(await pages()).length===1 && readFileSync(launches,'utf8').trim()===original)
   check('docking returns keyboard focus to the original terminal',await main.ev("document.activeElement.classList.contains('xterm-helper-textarea')"))

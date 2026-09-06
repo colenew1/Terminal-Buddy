@@ -11,7 +11,7 @@ for (const dir of [profile, testHome, project]) mkdirSync(dir)
 const callsFile = join(root, 'calls.jsonl'), mock = join(root, 'agent.mjs')
 writeFileSync(mock, `import {appendFileSync} from 'node:fs'; appendFileSync(${JSON.stringify(callsFile)}, JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()})+'\\n'); console.log('RESTORED '+process.argv.slice(2).join(' ')); process.stdin.resume();`)
 const command = `"${process.execPath}" "${mock}" {id}`
-const settings = { defaultShellId: 'cmd', trayIcon: false, closeToTray: false, desktopNotifications: false,
+const settings = { walkthroughVersion: 1, defaultShellId: 'cmd', trayIcon: false, closeToTray: false, desktopNotifications: false,
   claudeResumeCommand: command, codexResumeCommand: command, restoreOnLaunch: true }
 writeFileSync(join(profile, 'settings.json'), JSON.stringify(settings))
 const id1 = '11111111-1111-4111-8111-111111111111', id2 = '22222222-2222-4222-8222-222222222222'
@@ -106,8 +106,12 @@ try {
 
   seed();const beforeFresh=calls().length
   await launch();await ev("document.querySelector('[data-restore-fresh]').click()")
-  await until("!document.querySelector('.restore-session-dialog') && document.querySelectorAll('.cell').length===1")
-  check('Start fresh opens only a home terminal, with no agents',saved().sessions.length===1 && saved().sessions[0].cwd.toLowerCase()===testHome.toLowerCase() && !saved().sessions[0].resume && calls().length===beforeFresh)
+  await until("!document.querySelector('.restore-session-dialog') && !!document.querySelector('[data-new-kind=\"shell\"]:not(:disabled)')")
+  check('Start fresh shows choices without launching a terminal',await ev("!document.querySelector('.cell') && document.querySelectorAll('.new-session-choices > button').length===4") && saved().sessions.length===0 && calls().length===beforeFresh)
+  await ev("document.querySelector('[data-new-kind=\"shell\"]').click()")
+  await until("!document.querySelector('.new-session-dialog') && document.querySelectorAll('.cell').length===1")
+  await until("window.buddy.workspace.get().then(w => w.sessions.length===1)")
+  check('Explicit fresh terminal opens only a home terminal, with no agents',saved().sessions.length===1 && saved().sessions[0].cwd.toLowerCase()===testHome.toLowerCase() && !saved().sessions[0].resume && calls().length===beforeFresh)
   check('Start fresh clears reopen entries but preserves chat history files',saved().unrestoredSessions.length===0 && existsSync(claude) && existsSync(codex))
   await shutdown()
 
