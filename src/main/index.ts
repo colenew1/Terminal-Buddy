@@ -1,8 +1,8 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, Menu, clipboard, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, Menu, clipboard, nativeImage, Notification } from 'electron'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
-import { statSync } from 'node:fs'
+import { mkdirSync, statSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import type {
@@ -40,10 +40,16 @@ import {
  * Running `electron out/main/index.js` in development does not pick up the
  * package name, so Electron falls back to "Electron" and the dev build ends up
  * with its own settings, workspace and catalog cache under %APPDATA%\Electron.
- * Pinning the name makes dev and the installed build share one profile, so what
- * you test is what ships.
+ * Pinning the profile directory keeps dev and the installed build on one profile,
+ * so what you test is what ships, while the name stays human because macOS spells
+ * it into the app menu ("About Terminal Buddy"). The Dock tile and menu title come
+ * from the bundle rather than from setName, so scripts/dev-branding.mjs renames the
+ * development Electron.app to match.
  */
-app.setName('terminal-buddy')
+const profileDir = join(app.getPath('appData'), 'terminal-buddy')
+mkdirSync(profileDir, { recursive: true })
+app.setPath('userData', profileDir)
+app.setName('Terminal Buddy')
 
 const shells = detectShells()
 let alertsEnabled = false
@@ -535,6 +541,14 @@ if (!gotLock) {
     // Must match electron-builder's appId, or Windows treats a pinned
     // shortcut and the running window as two different apps.
     app.setAppUserModelId('com.terminalbuddy.app')
+
+    // A window's `icon` option does nothing on macOS: the Dock and the app switcher
+    // read the running bundle, which in development is Electron's own. Packaged
+    // builds already carry a multi-resolution icns, so only dev needs the mascot.
+    if (process.platform === 'darwin' && !app.isPackaged) {
+      const dockIcon = nativeImage.createFromPath(join(__dirname, '../..', 'build', 'icon.png'))
+      if (!dockIcon.isEmpty()) app.dock?.setIcon(dockIcon)
+    }
 
     // Electron's default menu registers Ctrl+V (and friends) as accelerators,
     // and Alt opens its hidden menu bar. Both fight the terminal, so the app
