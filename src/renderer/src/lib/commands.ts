@@ -26,7 +26,7 @@ export async function resumeChat(entry: ChatEntry, replaceId?: string): Promise<
   if (!entry.cwd) notify('That chat has no recorded folder — opening in your home directory.')
   const spec = {
     cwd: entry.cwd,
-    title: entry.title.slice(0, 28),
+    title: entry.title.slice(0, 100),
     initialCommand: resumeCommandFor(entry),
     agent: entry.agent,
     transcript: { agent: entry.agent, path: entry.path },

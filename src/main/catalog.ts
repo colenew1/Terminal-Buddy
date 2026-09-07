@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs'
-import { readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { readFile, readdir, stat, writeFile, rename, mkdir } from 'node:fs/promises'
 import { createInterface } from 'node:readline'
-import { join, basename, sep } from 'node:path'
+import { join, basename, dirname, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
 import type {
@@ -386,6 +386,44 @@ export class CatalogService {
   private cacheLoaded = false
   private inFlight: Promise<Catalog> | null = null
   private last: Catalog | null = null
+  private chatNames: Record<string, string> | null = null
+  private renameQueue: Promise<unknown> = Promise.resolve()
+
+  private names(): Record<string, string> {
+    if (this.chatNames) return this.chatNames
+    const path = join(dirname(this.cachePath), 'chat-names.json')
+    for (const file of [path, path + '.bak']) {
+      try {
+        const value = JSON.parse(readFileSync(file, 'utf8'))
+        if (!value || Array.isArray(value) || typeof value !== 'object') continue
+        this.chatNames = Object.fromEntries(Object.entries(value).filter(([key, title]) =>
+          /^(claude|codex):.+$/.test(key) && typeof title === 'string' && title.trim().length > 0 && title.length <= 100)) as Record<string, string>
+        return this.chatNames
+      } catch { /* Try the last good copy. */ }
+    }
+    return (this.chatNames = {})
+  }
+
+  renameChat(agent: string, id: string, title: string): Promise<Catalog> {
+    const operation = this.renameQueue.then(async () => {
+      if (!['claude', 'codex'].includes(agent) || typeof id !== 'string' || typeof title !== 'string' ||
+          !title.trim() || title.trim().length > 100 || /[\r\n\x00]/.test(title)) throw Error('Enter a chat name between 1 and 100 characters.')
+      if (this.inFlight) await this.inFlight
+      if (!this.last?.chats.some(chat => chat.agent === agent && chat.id === id)) throw Error('This chat is no longer in the catalog. Rescan and try again.')
+      const file = join(dirname(this.cachePath), 'chat-names.json')
+      const next = { ...this.names(), [`${agent}:${id}`]: title.trim() }
+      await mkdir(dirname(file), { recursive: true })
+      await writeFile(file + '.bak.tmp', JSON.stringify(this.names()), 'utf8')
+      await rename(file + '.bak.tmp', file + '.bak')
+      await writeFile(file + '.tmp', JSON.stringify(next, null, 2), 'utf8')
+      await rename(file + '.tmp', file)
+      this.chatNames = next
+      this.last = { ...this.last, chats: this.last.chats.map(chat => chat.agent === agent && chat.id === id ? { ...chat, title: title.trim() } : chat) }
+      return this.last
+    })
+    this.renameQueue = operation.catch(() => {})
+    return operation
+  }
 
   constructor(
     private cachePath: string,
@@ -510,7 +548,8 @@ export class CatalogService {
     const projects = [...byProject.values()].sort((a, b) => b.lastActive - a.lastActive)
 
     this.onProgress({ phase: 'done', done: files.length, total: files.length })
-    this.last = { skills, chats, projects, scannedAt: Date.now(), errors }
+    const names = this.names()
+    this.last = { skills, chats: chats.map(chat => names[`${chat.agent}:${chat.id}`] ? { ...chat, title: names[`${chat.agent}:${chat.id}`] } : chat), projects, scannedAt: Date.now(), errors }
     return this.last
   }
 

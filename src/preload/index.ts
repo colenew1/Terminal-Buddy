@@ -65,6 +65,8 @@ const api = {
   },
 
   catalog: {
+    rename: (agent: 'claude' | 'codex', id: string, title: string): Promise<Catalog> => ipcRenderer.invoke('catalog:rename', agent, id, title),
+    onRenamed: (cb: (catalog: Catalog, agent: 'claude' | 'codex', id: string, title: string) => void): Unsub => on('catalog:renamed', cb),
     get: (): Promise<Catalog> => ipcRenderer.invoke('catalog:get'),
     refresh: (): Promise<Catalog> => ipcRenderer.invoke('catalog:refresh'),
     exportMarkdown: (entry: ChatEntry): Promise<OpResult> => ipcRenderer.invoke('catalog:export', entry),
@@ -126,6 +128,7 @@ const api = {
   },
 
   clipboard: {
+    onPaste: (cb: (text: string) => void): Unsub => on('clipboard:paste', cb),
     filePath: (file: File): string => webUtils.getPathForFile(file),
     read: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
     write: (text: string): Promise<void> => ipcRenderer.invoke('clipboard:write', text)

@@ -29,6 +29,17 @@ export default function App(): React.JSX.Element {
   const presetsOpen = useStore(s => s.presetsOpen)
   const [transferHover, setTransferHover] = useState(false)
   useEffect(connectWindowTransfers, [])
+  useEffect(() => window.buddy.catalog.onRenamed((catalog, agent, id, title) => {
+    useStore.setState({ catalog })
+    const store = useStore.getState()
+    for (const session of store.sessions) {
+      if (session.resume?.agent === agent && session.resume.id === id) store.renameSession(session.id, title)
+    }
+  }), [])
+  useEffect(() => window.buddy.clipboard.onPaste(text => {
+    if (useStore.getState().transferBusy) return
+    void handleClipboard('paste', text).catch(() => useStore.getState().notify('Could not paste clipboard text. Please try again.'))
+  }), [])
   useEffect(() => window.buddy.workspace.onTransferHover(setTransferHover), [])
   useEffect(() => window.buddy.library.onChanged(library => useStore.setState({ library })), [])
   const ready = useStore((s) => s.ready)

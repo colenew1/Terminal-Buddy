@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, screen, type WebContents } from 'electron'
 import { join } from 'node:path'
+import { installTextPaste } from './clipboard'
 import type { Pos, Settings } from '@shared/types'
 import type { PtyManager } from './pty'
 
@@ -114,6 +115,7 @@ export class PopoutWindows {
       icon: join(app.isPackaged ? process.resourcesPath : join(__dirname, '../..'), 'resources', 'icon.png'),
       webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: false, spellcheck: false, backgroundThrottling: false }
     })
+    installTextPaste(child.webContents)
     const entry: Detached = { window: child, ready: false, queue: [], bytes: 0,
       timeout: setTimeout(() => this.dock(id), 15000) }
     this.windows.set(id, entry)

@@ -3,13 +3,15 @@ import type { ChatEntry } from '@shared/types'
 import { useStore } from '../store/useStore'
 import { bytes, timeAgo } from '../lib/format'
 import { resumeChat, resumeCommandFor } from '../lib/commands'
+import RenameChatButton from './RenameChatButton'
 
 interface Props {
   entry: ChatEntry
   onClose: () => void
 }
 
-export default function ChatDetail({ entry, onClose }: Props): React.JSX.Element {
+export default function ChatDetail({ entry: savedEntry, onClose }: Props): React.JSX.Element {
+  const entry = useStore(s => s.catalog?.chats.find(chat => chat.agent === savedEntry.agent && chat.id === savedEntry.id)) ?? savedEntry
   const notify = useStore((s) => s.notify)
 
   useEffect(() => {
@@ -50,6 +52,7 @@ export default function ChatDetail({ entry, onClose }: Props): React.JSX.Element
         </div>
 
         <div className="modal-foot">
+          <RenameChatButton entry={entry} />
           <button
             className="btn primary"
             onClick={() => {

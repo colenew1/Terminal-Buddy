@@ -35,7 +35,14 @@ export default function NewSessionDialog(): React.JSX.Element {
     setBusy(true)
     try {
       const dir = await window.buddy.app.pickFolder()
-      if (dir) { setCwd(dir); setError(''); void window.buddy.library.rememberFolder(dir).catch(() => {}) }
+      if (dir) {
+        setCwd(dir); setError('')
+        const store = useStore.getState()
+        if (await store.openSession({ cwd: dir, requireCwd: true })) {
+          store.setLocked(true)
+          close()
+        }
+      }
     } catch {
       setError('Could not open the folder picker. Please try again.')
     } finally { inFlight.current = false; setBusy(false) }
@@ -110,7 +117,7 @@ export default function NewSessionDialog(): React.JSX.Element {
             <strong>Start a new chat</strong><span>{profiles.length ? 'Choose Claude, Codex, or a custom assistant' : 'Choose Claude or Codex'}</span>
           </button>
           <button className="btn" data-new-folder disabled={busy} onClick={() => void chooseFolder()}>
-            <strong>Open folder…</strong><span>Choose the folder for your new chat or terminal</span>
+            <strong>Open folder…</strong><span>Choose a folder and open its terminal immediately</span>
           </button>
           <button className="btn" data-new-kind="shell" disabled={busy || !cwd} onClick={() => void launch('shell')}>
             <strong>Start a base terminal</strong><span>Open a plain terminal for commands or tool updates</span>

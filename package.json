@@ -1,6 +1,6 @@
 {
   "name": "terminal-buddy",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Friendly, organized terminals for your coding agents, with custom names and desktop alerts.",
   "main": "./out/main/index.js",
   "author": "Terminal Buddy contributors",
@@ -22,7 +22,7 @@
     "test:windows": "node scripts/verify-windows.mjs",
     "postinstall": "electron-builder install-app-deps && node scripts/dev-branding.mjs",
     "icon": "node scripts/make-icon.mjs",
-    "test": "npm run typecheck && npm run test:platform && npm run test:catalog && npm run test:settings && npm run test:alerts && npm run test:submit && npm run test:screen && npm run build && npm run test:windows && npm run test:launcher && npm run test:assistants && npm run test:features && npm run test:popout && npm run test:restore && npm run test:smoke && npm run test:feed && npm run test:grid && npm run test:resize && npm run test:import && npm run test:registry",
+    "test": "npm run typecheck && npm run test:platform && npm run test:catalog && npm run test:settings && npm run test:alerts && npm run test:submit && npm run test:screen && npm run test:native-paste && npm run build && npm run test:terminal-input && npm run test:windows && npm run test:launcher && npm run test:assistants && npm run test:features && npm run test:popout && npm run test:restore && npm run test:smoke && npm run test:feed && npm run test:grid && npm run test:resize && npm run test:import && npm run test:registry",
     "test:settings": "node scripts/verify-settings-store.mjs",
     "test:features": "node scripts/verify-features.mjs",
     "test:popout": "node scripts/verify-popout.mjs",
@@ -36,7 +36,9 @@
     "test:import": "node scripts/verify-import.mjs",
     "test:catalog": "node scripts/verify-catalog.mjs",
     "test:registry": "node scripts/verify-registry.mjs",
-    "test:feed": "node scripts/verify-feed.mjs"
+    "test:feed": "node scripts/verify-feed.mjs",
+    "test:native-paste": "node scripts/verify-native-paste.mjs",
+    "test:terminal-input": "node scripts/verify-terminal-input.mjs"
   },
   "dependencies": {
     "@lydell/node-pty": "1.2.0-beta.15",

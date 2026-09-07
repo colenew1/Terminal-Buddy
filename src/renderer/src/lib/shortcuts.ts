@@ -31,16 +31,21 @@ export const shortcutLabel = (text: string): string => IS_MAC
  * copy when there is a selection; otherwise it must stay an interrupt.
  */
 export function matchClipboard(e: KeyboardEvent): ClipboardAction | null {
+  // Dictation and accessibility tools can omit the physical code entirely.
+  const code = e.code && e.code !== 'Unidentified' ? e.code :
+    /^[cvx]$/i.test(e.key ?? '') ? `Key${e.key.toUpperCase()}` :
+      e.key === 'Insert' || e.keyCode === 45 ? 'Insert' :
+        ({ 67: 'KeyC', 86: 'KeyV', 88: 'KeyX' } as Record<number, string>)[e.keyCode] ?? ''
   // Control+C/V/X belong to the terminal line editor on a Mac.
   const ctrl = IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey || e.metaKey
   if (e.altKey) return null
 
   // The old terminal chords, still honoured.
-  if (!ctrl && e.shiftKey && e.code === 'Insert') return 'paste'
-  if (ctrl && !e.shiftKey && e.code === 'Insert') return 'copy'
+  if (!ctrl && e.shiftKey && code === 'Insert') return 'paste'
+  if (ctrl && !e.shiftKey && code === 'Insert') return 'copy'
 
   if (!ctrl) return null
-  switch (e.code) {
+  switch (code) {
     case 'KeyV':
       return 'paste'
     case 'KeyC':

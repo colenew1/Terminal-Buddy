@@ -12,6 +12,7 @@ import { matchShortcut, matchClipboard } from '../lib/shortcuts'
 import { themeById } from '../lib/themes'
 import { arrowsFor, computeClickDelta } from '../lib/cursor'
 import { isTerminalReply } from '@shared/terminal-protocol'
+import { installTerminalScrolling } from '../lib/terminal-scrolling'
 
 
 
@@ -40,6 +41,7 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
       fontSize: st.fontSize,
       fontFamily: st.fontFamily,
       scrollback: st.scrollback,
+      scrollOnEraseInDisplay: true,
       cursorBlink: st.cursorBlink,
       allowProposedApi: true,
       macOptionIsMeta: true,
@@ -53,6 +55,7 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
     term.loadAddon(new WebLinksAddon((_e, uri) => window.buddy.app.openExternal(uri)))
 
     term.open(host)
+    installTerminalScrolling(term)
 
     // WebGL keeps 8 panes smooth, but it is not available everywhere and the
     // context can be lost. Either way, fall back to the DOM renderer quietly.

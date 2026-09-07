@@ -27,7 +27,7 @@ It is a personal tool, published in case it's useful. No telemetry, no account, 
 
 ## One terminal, no transcript view
 
-Fresh launches, new windows, **Open something else…** in recovery, and every **+** open a chooser without creating a terminal. Choose **Pick a chat** to browse saved conversations, **Start a new chat** to choose Claude, Codex, or a configured assistant, **Open folder…** to select the working folder, or **Start a base terminal** to launch a plain terminal. Expand **Recent folders, pinned chats & presets** for shortcuts. Pin or unpin conversations in the catalog with **☆ Pin**; pinned chats validate their saved history before reopening. Favorites and recent folders are shared across windows and saved for the next launch. Each fresh chooser starts in your home directory; selecting a folder updates it for the next chat or terminal. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
+Fresh launches, new windows, **Open something else…** in recovery, and every **+** open a chooser without creating a terminal. Choose **Pick a chat** to browse saved conversations, **Start a new chat** to choose Claude, Codex, or a configured assistant, **Open folder…** to select a folder and immediately launch its terminal, or **Start a base terminal** to launch a plain terminal. Expand **Recent folders, pinned chats & presets** for shortcuts. Pin or unpin conversations in the catalog with **☆ Pin**; pinned chats validate their saved history before reopening. Favorites and recent folders are shared across windows and saved for the next launch. Each fresh chooser starts in your home directory. Selecting **Open** in the folder picker opens a plain terminal in that folder immediately; cancelling opens nothing. Recent-folder shortcuts still select the folder for a new chat. The keyboard shortcut, tray action, and command palette use the same chooser. Only an explicit duplicate or saved-chat resume keeps the original folder.
 
 Each instance shows the agent's native terminal output. Terminal Buddy enables truecolor for its child terminals, rather than inheriting a launcher's `NO_COLOR` setting. Colors come from the running program and the selected terminal theme; output is not rewritten into chat bubbles.
 
@@ -186,6 +186,14 @@ After first launch, open **Settings (`Ctrl+,`) → Windows integration** and ins
 xterm.js treats `Ctrl+V` as the control byte `0x16` and calls `preventDefault()`, which kills the browser's own paste — so the key reached the shell as a raw SYN and appeared to do nothing. On top of that, Electron's default application menu registered `Ctrl+V` as a global accelerator and opened a hidden menu bar on `Alt`, which is why odd `Alt` combinations seemed to paste instead.
 
 Both are gone: the menu is removed (`Menu.setApplicationMenu(null)`) and the app owns every clipboard key itself, routing through Electron's clipboard over IPC rather than `navigator.clipboard`, which needs a permission grant and fails silently without one. See `src/renderer/src/lib/clipboard.ts`.
+
+### Dictation and scrollback
+
+Saved chats have a **Rename** button in the catalog and chat details. These names persist across rescans and restarts, update linked open terminals, and are used when reopening the conversation. Names are stored in Terminal Buddy; the original agent transcript files are preserved.
+
+Native paste shortcuts capture clipboard text before sending it to the renderer. This accommodates dictation tools such as Wispr Flow that temporarily replace the clipboard and then restore its previous contents. Synthetic shortcuts without a physical key code are also recognized. Pasting always inserts text once, with no automatic Enter, including in popped-out terminals.
+
+Use the mouse wheel or the terminal scrollbar to read earlier output. Clearing the screen retains previous visible output in scrollback, and normal-buffer scrolling works even when an agent enables mouse reporting. Buddy launches ordinary Codex chats and resumes with `--no-alt-screen` so their output stays in native scrollback; explicit alternate-screen options and custom launch commands are preserved. If you type the command yourself in a base terminal, use `codex --no-alt-screen`. Full-screen programs keep control of their own alternate-screen navigation.
 
 ## How it reads your agent history
 

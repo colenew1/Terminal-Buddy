@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css'
 import { applyTheme, themeById } from '../lib/themes'
 import { matchClipboard } from '../lib/shortcuts'
 import { isTerminalReply } from '@shared/terminal-protocol'
+import { installTerminalScrolling } from '../lib/terminal-scrolling'
 
 export default function DetachedTerminal({ id }: { id: string }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null)
@@ -31,11 +32,12 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
       setReduceMotion(settings.reduceMotion)
       setTitle(session.title); setStatus(value.exited ? `Process exited (${value.exitCode ?? 0})` : 'Live terminal · same running session')
       term = new Terminal({ cols: snapshot.cols, rows: snapshot.rows, fontSize: settings.fontSize, fontFamily: settings.fontFamily,
-        scrollback: settings.scrollback, cursorBlink: settings.cursorBlink, theme: themeById(settings.theme).terminal, allowProposedApi: true })
+        scrollback: settings.scrollback, scrollOnEraseInDisplay: true, cursorBlink: settings.cursorBlink, theme: themeById(settings.theme).terminal, allowProposedApi: true })
       terminal.current = term
       fit = new FitAddon(); term.loadAddon(fit)
       term.loadAddon(new WebLinksAddon((_event, uri) => window.buddy.app.openExternal(uri)))
       term.open(host.current!)
+      installTerminalScrolling(term)
       term.onData((data) => { if (ready && !isTerminalReply(data)) window.buddy.pty.write(id, data) })
       term.attachCustomKeyEventHandler((event) => {
         if (event.type !== 'keydown') return true
@@ -74,11 +76,16 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
         event.preventDefault(); window.buddy.clipboard.write(term.getSelection()); term.clearSelection()
       } else if (action === 'cut') event.preventDefault()
     }
+    const offPaste = window.buddy.clipboard.onPaste(text => {
+      if (!ready || disposed) return
+      if (text) term?.paste(text)
+      else setError('No text is on the clipboard. Copy the last transcript in Wispr Flow, then paste again.')
+    })
     window.addEventListener('keydown', onKey)
     const observer = new ResizeObserver(resize)
     observer.observe(host.current!)
     void window.buddy.popout.init(id).catch((reason) => setError(String(reason)))
-    return () => { disposed = true; observer.disconnect(); offInit(); offData(); offExit(); offTitle(); offAttention(); offSettings(); window.removeEventListener('keydown', onKey); term?.dispose(); terminal.current = null }
+    return () => { disposed = true; observer.disconnect(); offPaste(); offInit(); offData(); offExit(); offTitle(); offAttention(); offSettings(); window.removeEventListener('keydown', onKey); term?.dispose(); terminal.current = null }
   }, [id])
   const point = (event: React.PointerEvent): { x: number; y: number } => ({ x: event.screenX, y: event.screenY })
   return (

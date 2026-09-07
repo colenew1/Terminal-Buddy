@@ -4,6 +4,7 @@ import { useStore, type SidebarTab } from '../store/useStore'
 import { bytes, fuzzy, shortPath, timeAgo } from '../lib/format'
 import { scanLine } from '../lib/copy'
 import ChatDetail from './ChatDetail'
+import RenameChatButton from './RenameChatButton'
 import { DRAG_MIME, setDragItem, type DragItem } from '../lib/dnd'
 import { resumeChat } from '../lib/commands'
 
@@ -176,6 +177,7 @@ export default function Sidebar(): React.JSX.Element {
                 <span>{timeAgo(c.updatedAt)}</span>
               </div>
               <div className="row-actions">
+                <RenameChatButton entry={c} />
                 <button className="btn tiny" data-pin-chat={c.id} aria-pressed={pinned.some(p => p.agent === c.agent && p.id === c.id)}
                   onClick={e => { e.stopPropagation(); void window.buddy.library.pin(c, !pinned.some(p => p.agent === c.agent && p.id === c.id)).catch(error => notify(error.message)) }}>
                   {pinned.some(p => p.agent === c.agent && p.id === c.id) ? '★ Unpin' : '☆ Pin'}

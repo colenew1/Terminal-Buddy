@@ -28,6 +28,7 @@ import { TerminalActivity, type TerminalAlert } from './terminal-activity'
 import { PopoutWindows } from './popouts'
 import { WindowTransfers } from './window-transfers'
 import { registerLauncherLibrary } from './launcher-library'
+import { installTextPaste } from './clipboard'
 import {
   installCli,
   installContextMenu,
@@ -46,9 +47,11 @@ import {
  * from the bundle rather than from setName, so scripts/dev-branding.mjs renames the
  * development Electron.app to match.
  */
-const profileDir = join(app.getPath('appData'), 'terminal-buddy')
-mkdirSync(profileDir, { recursive: true })
-app.setPath('userData', profileDir)
+if (!app.commandLine.hasSwitch('user-data-dir')) {
+  const profileDir = join(app.getPath('appData'), 'terminal-buddy')
+  mkdirSync(profileDir, { recursive: true })
+  app.setPath('userData', profileDir)
+}
 app.setName('Terminal Buddy')
 
 const shells = detectShells()
@@ -219,6 +222,7 @@ function createWindow(id: string = randomUUID(), persist = true): BrowserWindow 
       nodeIntegration: false, sandbox: false, spellcheck: false, backgroundThrottling: false
     }
   })
+  installTextPaste(win.webContents)
   windows.set(id, { id, label, window: win, total: 0, waiting: 0, lastFocused: Date.now() })
   activeWindowId = id
   if (persist) persistWindowList()
@@ -411,6 +415,12 @@ function registerIpc(): void {
     return withJumpList(catalog!.scan(projectRoots()))
   })
   ipcMain.handle('catalog:refresh', async (): Promise<Catalog> => withJumpList(catalog!.scan(projectRoots())))
+  ipcMain.handle('catalog:rename', async (event, agent: string, id: string, title: string): Promise<Catalog> => {
+    workspaceFor(event.sender)
+    const result = await catalog!.renameChat(agent, id, title)
+    sendToRenderer('catalog:renamed', result, agent, id, title.trim())
+    return result
+  })
 
   ipcMain.handle('catalog:export', async (e, entry: ChatEntry) => {
     const settings = loadSettings()

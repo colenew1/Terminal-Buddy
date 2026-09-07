@@ -111,6 +111,12 @@ export class PtyManager {
     // lets new chats be restored without guessing which transcript belongs to them.
     let resume = spec.resume
     let command = spec.initialCommand
+    // Inline mode retains native scrollback. Respect explicit screen options and
+    // custom launchers; this only adjusts Buddy's ordinary Codex launches.
+    if (spec.agent === 'codex' && command && /^codex(?:\s|$)/.test(command) &&
+        !command.includes('--no-alt-screen') && !command.includes('alternate_screen')) {
+      command = command.replace(/^codex/, 'codex --no-alt-screen')
+    }
     if (spec.agent === 'claude' && command === 'claude' && !resume) {
       const chatId = randomUUID()
       resume = { agent: 'claude', id: chatId, path: join(homedir(), '.claude', 'projects', cwd.replace(/[^A-Za-z0-9]/g, '-'), chatId + '.jsonl') }
@@ -143,7 +149,7 @@ export class PtyManager {
       resume
     }
 
-    const screen = new HeadlessTerminal({ cols: 80, rows: 24, scrollback: this.scrollback, allowProposedApi: true })
+    const screen = new HeadlessTerminal({ cols: 80, rows: 24, scrollback: this.scrollback, scrollOnEraseInDisplay: true, allowProposedApi: true })
     const serializer = new SerializeAddon()
     screen.loadAddon(serializer)
     // One parser answers terminal queries even while a view is being attached.

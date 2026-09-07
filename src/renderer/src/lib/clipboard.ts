@@ -23,10 +23,11 @@ function isTextField(el: Element | null): el is HTMLInputElement | HTMLTextAreaE
 }
 
 /** Returns true when the event was consumed and should be preventDefault()ed. */
-export async function handleClipboard(action: ClipboardAction): Promise<boolean> {
+export async function handleClipboard(action: ClipboardAction, capturedText?: string): Promise<boolean> {
   const el = document.activeElement
 
-  if (isTextField(el)) return handleTextField(el, action)
+  if (isTextField(el)) return handleTextField(el, action, capturedText)
+  if (document.querySelector('dialog[open]')) return false
 
   // Anything else in the app means the terminal: either its hidden textarea has
   // focus, or focus is nowhere useful and the active pane is what you meant.
@@ -46,11 +47,11 @@ export async function handleClipboard(action: ClipboardAction): Promise<boolean>
   }
 
   if (action === 'paste') {
-    const text = await window.buddy.clipboard.read()
+    const text = capturedText ?? await window.buddy.clipboard.read()
     if (text) {
       useStore.getState().markInput(id)
       h.term.paste(text)
-    }
+    } else useStore.getState().notify('No text is on the clipboard. In Wispr Flow, copy the last transcript, then paste again.')
     return true
   }
 
@@ -60,7 +61,8 @@ export async function handleClipboard(action: ClipboardAction): Promise<boolean>
 
 async function handleTextField(
   el: HTMLInputElement | HTMLTextAreaElement,
-  action: ClipboardAction
+  action: ClipboardAction,
+  capturedText?: string
 ): Promise<boolean> {
   const start = el.selectionStart ?? 0
   const end = el.selectionEnd ?? 0
@@ -80,7 +82,7 @@ async function handleTextField(
     return true
   }
 
-  const text = await window.buddy.clipboard.read()
+  const text = capturedText ?? await window.buddy.clipboard.read()
   if (text) document.execCommand('insertText', false, text)
   return true
 }
