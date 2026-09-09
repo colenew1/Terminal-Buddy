@@ -43,7 +43,7 @@ Click **⊞ New window** in the title bar, use **Ctrl+Shift+N** (**Cmd+Shift+N**
 
 Terminal input, broadcast typing, activity, and pop-outs stay within their owning workspace. Preferences and the saved-chat catalog are shared. Closing one workspace stops only its terminals and closes its pop-outs; other windows keep running. If Close to tray is enabled, closing hides the workspace and keeps its terminals alive. Quit from the tray or Mac application menu to exit all windows.
 
-On the next launch, windows that were open when you quit reopen with their own recovery choosers, saved names, and layouts. Explicitly closing a workspace removes it from that reopening list; closing the last workspace keeps it for the next launch. Existing single-window saves continue to work. Use **⇥** on a tab or pane to move it to another window, or drag its header outside the current window onto another visible workspace. Dropping outside every workspace still creates a pop-out. Moves keep the running process, terminal output, name, and recovery link; moving a popped-out terminal docks it into the destination. Choose **Workspace windows → Combine all windows here** to collect the terminals and close the emptied windows. The destination keeps its layout. Finish pending recovery choices first; a move that would exceed 16 terminals is rejected before changing any workspace.
+On the next launch, windows that were open when you quit reopen with their own recovery choosers, saved names, and layouts. Explicitly closing a workspace removes it from that reopening list; closing the last workspace keeps it for the next launch. Existing single-window saves continue to work. Use **⇥** on a tab or pane to move it to another window, or drag its header outside the current window onto another visible workspace. Dropping outside every workspace still creates a pop-out. Moves keep the running process, terminal output, name, and recovery link. A popped-out terminal cannot be moved to another workspace: dock it back first, then move it. Its ⇥ button is disabled while it is popped out. Choose **Workspace windows → Combine all windows here** to collect the terminals and close the emptied windows. The destination keeps its layout. Finish pending recovery choices first; a move that would exceed 16 terminals is rejected before changing any workspace.
 
 **Custom assistants and models**
 
@@ -189,7 +189,11 @@ Both are gone: the menu is removed (`Menu.setApplicationMenu(null)`) and the app
 
 ### Dictation and scrollback
 
-Saved chats have a **Rename** button in the catalog and chat details. These names persist across rescans and restarts, update linked open terminals, and are used when reopening the conversation. Names are stored in Terminal Buddy; the original agent transcript files are preserved.
+Saved chats have a **Rename** button in the catalog and chat details. These names persist across rescans and restarts, update linked open terminals, and are used when reopening the conversation.
+
+Renaming a **Claude** chat renames the conversation itself: Buddy appends a `custom-title` record — the same one Claude Code writes for a renamed session — so the new name also appears in `claude --resume`. Appending never rewrites anything already in the transcript, and title records are excluded from recency, so renaming never reorders your chat list. A name you chose outranks any AI title Claude generates later. **Codex** rollout files carry no title of any kind (its picker always shows the first user message), so those names are stored in Terminal Buddy only and the rollout file is never written to.
+
+Without a title record, a chat is named after its first real message — which is why untitled sessions read like `git pull main then lets talk`. Renaming is the fix.
 
 Native paste shortcuts capture clipboard text before sending it to the renderer. This accommodates dictation tools such as Wispr Flow that temporarily replace the clipboard and then restore its previous contents. Synthetic shortcuts without a physical key code are also recognized. Pasting always inserts text once, with no automatic Enter, including in popped-out terminals.
 
@@ -251,8 +255,8 @@ Worth knowing how it works, because it explains the edges. A terminal cannot mov
 
 It deliberately does nothing in three cases:
 
-- **Full-screen programs** (vim, less, htop). They own the whole grid and the cursor isn't a text caret, so arrows would be navigation — or worse.
-- **When the program asked for mouse events.** The click belongs to it.
+- **Full-screen programs** (vim, less, htop). They own the whole grid and the cursor isn't a text caret, so arrows would be navigation — or worse. This is decided by the alternate screen buffer, not by mouse reporting: agents such as Codex turn mouse reporting on for their own scrolling while still editing an ordinary command line, and clicking to position works normally in them.
+- **When you have scrolled back through history.** The caret is off-screen, so there is nothing to measure from.
 - **When the click would need Up or Down.** Those mean *history* to every shell worth using; sending them would silently replace the line you were editing. Clicks within one wrapped line still work, because horizontal arrows walk over the wrap on their own.
 
 A click on an unfocused pane only focuses it. The next click positions.

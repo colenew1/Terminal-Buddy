@@ -1,5 +1,5 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs'
-import { readFile, readdir, stat, writeFile, rename, mkdir } from 'node:fs/promises'
+import { appendFile, open, readFile, readdir, stat, writeFile, rename, mkdir } from 'node:fs/promises'
 import { createInterface } from 'node:readline'
 import { join, basename, dirname, sep } from 'node:path'
 import { homedir } from 'node:os'
@@ -234,7 +234,8 @@ function projectSlugToPath(slug: string): string {
 async function parseClaudeChat(path: string, bytes: number, mtime: number): Promise<ChatEntry> {
   const id = basename(path).replace(/\.jsonl$/, '')
   const project = basename(join(path, '..'))
-  let title = ''
+  let aiTitle = ''
+  let customTitle = ''
   let clean = ''
   let anyUser = ''
   let cwd = ''
@@ -248,10 +249,12 @@ async function parseClaudeChat(path: string, bytes: number, mtime: number): Prom
       if (line.length < 12) continue
       try {
         const d = JSON.parse(line)
-        updatedAt = Math.max(updatedAt, Date.parse(d.timestamp ?? '') || 0)
         // Titles are regenerated as the session grows; the last one is current.
-        if (d.type === 'ai-title' && typeof d.aiTitle === 'string') title = d.aiTitle
-        if (d.type === 'custom-title' && typeof d.customTitle === 'string') title = d.customTitle
+        // A name a person chose outranks any AI title written afterwards, and
+        // neither counts as activity — renaming must not reorder your chats.
+        if (d.type === 'ai-title' && typeof d.aiTitle === 'string') { aiTitle = d.aiTitle; continue }
+        if (d.type === 'custom-title' && typeof d.customTitle === 'string') { customTitle = d.customTitle; continue }
+        updatedAt = Math.max(updatedAt, Date.parse(d.timestamp ?? '') || 0)
         if (d.type !== 'user') continue
         turns++
         if (!cwd && typeof d.cwd === 'string') cwd = d.cwd
@@ -272,6 +275,7 @@ async function parseClaudeChat(path: string, bytes: number, mtime: number): Prom
   }
 
   const preview = clean || anyUser
+  const title = customTitle || aiTitle
   return {
     id,
     agent: 'claude',
@@ -375,7 +379,7 @@ interface CacheShape {
 }
 
 // Bump whenever parsing changes, so cached entries are re-derived.
-const CACHE_VERSION = 6
+const CACHE_VERSION = 7
 
 /**
  * Indexes ~300MB of agent transcripts. Every parse is keyed on (size, mtime),
@@ -404,12 +408,50 @@ export class CatalogService {
     return (this.chatNames = {})
   }
 
+  /**
+   * Claude stores a renamed conversation as a `custom-title` record appended to
+   * its own transcript, which is why the parser above reads that type. Writing
+   * one is what makes the new name show up in `claude --resume`, not just here.
+   * Appending never rewrites a byte Claude already wrote.
+   *
+   * Codex rollout files carry no title of any kind — its picker always shows the
+   * first user message — so there is nothing to write and the name stays local.
+   */
+  private async writeChatTitle(entry: ChatEntry, title: string): Promise<void> {
+    if (entry.agent !== 'claude') return
+    const record = JSON.stringify({ type: 'custom-title', customTitle: title, sessionId: entry.id, timestamp: new Date().toISOString() })
+    let tail = ''
+    try {
+      const handle = await open(entry.path, 'r')
+      try {
+        const { size } = await handle.stat()
+        if (size > 0) {
+          const buffer = Buffer.alloc(1)
+          await handle.read(buffer, 0, 1, size - 1)
+          tail = buffer.toString('utf8')
+        }
+      } finally { await handle.close() }
+    } catch (error) {
+      throw Error(`Could not open the conversation file to rename it: ${(error as Error).message}`)
+    }
+    try {
+      await appendFile(entry.path, (tail && tail !== '\n' ? '\n' : '') + record + '\n', 'utf8')
+    } catch (error) {
+      throw Error(`Could not rename the conversation itself: ${(error as Error).message}`)
+    }
+  }
+
   renameChat(agent: string, id: string, title: string): Promise<Catalog> {
     const operation = this.renameQueue.then(async () => {
       if (!['claude', 'codex'].includes(agent) || typeof id !== 'string' || typeof title !== 'string' ||
           !title.trim() || title.trim().length > 100 || /[\r\n\x00]/.test(title)) throw Error('Enter a chat name between 1 and 100 characters.')
       if (this.inFlight) await this.inFlight
-      if (!this.last?.chats.some(chat => chat.agent === agent && chat.id === id)) throw Error('This chat is no longer in the catalog. Rescan and try again.')
+      const current = this.last
+      const entry = current?.chats.find(chat => chat.agent === agent && chat.id === id)
+      if (!current || !entry) throw Error('This chat is no longer in the catalog. Rescan and try again.')
+      // The conversation is renamed first: if that fails nothing has changed yet,
+      // so the name never disagrees with what the agent will show.
+      await this.writeChatTitle(entry, title.trim())
       const file = join(dirname(this.cachePath), 'chat-names.json')
       const next = { ...this.names(), [`${agent}:${id}`]: title.trim() }
       await mkdir(dirname(file), { recursive: true })
@@ -418,7 +460,7 @@ export class CatalogService {
       await writeFile(file + '.tmp', JSON.stringify(next, null, 2), 'utf8')
       await rename(file + '.tmp', file)
       this.chatNames = next
-      this.last = { ...this.last, chats: this.last.chats.map(chat => chat.agent === agent && chat.id === id ? { ...chat, title: title.trim() } : chat) }
+      this.last = { ...current, chats: current.chats.map(chat => chat.agent === agent && chat.id === id ? { ...chat, title: title.trim() } : chat) }
       return this.last
     })
     this.renameQueue = operation.catch(() => {})

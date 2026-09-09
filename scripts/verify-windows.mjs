@@ -179,16 +179,22 @@ try {
   await until(() => first.ev("document.querySelectorAll('.tab[data-session-id]').length===1 && !document.querySelector('.transfer-hover')"), 'drop handoff completes')
   await first.ev(`window.buddy.workspace.move(${JSON.stringify(a)},${JSON.stringify(secondId)})`)
   pass('screen-coordinate dragging highlights another workspace and drops the same live terminal into it')
-  // A pop-out moves with the workspace terminal by docking its existing view.
+  // A pop-out is never handed to another workspace: that would destroy its window
+  // mid-transfer. It has to be docked first, and then it moves like any terminal.
   await second.ev(`window.buddy.popout.open(${JSON.stringify(a)})`)
   const movePop = await connect(page => new URL(page.url).searchParams.get('popout') === a)
   await ready(movePop)
+  assert.match(await second.ev(`window.buddy.workspace.move(${JSON.stringify(a)},'primary').then(()=>'UNEXPECTED',e=>e.message)`), /Dock the popped-out terminal back/)
+  assert.equal(await second.ev("!!document.querySelector('.detached-placeholder')"), true)
+  assert.equal(await second.ev("document.querySelector('[data-move-session]').disabled"), true)
+  await second.ev(`window.buddy.popout.dock(${JSON.stringify(a)})`)
+  await until(() => second.ev("!document.querySelector('.detached-placeholder')"), 'pop-out docks back before moving')
   await second.ev(`window.buddy.workspace.move(${JSON.stringify(a)},'primary')`)
-  await until(() => first.ev("document.querySelectorAll('.tab[data-session-id]').length===1 && !document.querySelector('.detached-placeholder')"), 'pop-out moves and docks')
+  await until(() => first.ev("document.querySelectorAll('.tab[data-session-id]').length===1 && !document.querySelector('.detached-placeholder')"), 'docked terminal moves')
   await write(first, a, 'BACK_HOME')
   await until(() => first.ev("window.__output.includes('INPUT:4241434b5f484f4d45')"), 'same process back in source')
   process.kill(apid, 0)
-  pass('a popped-out terminal moves without restarting and old owners cannot request another move')
+  pass('a popped-out terminal must dock before moving, then moves without restarting')
   // Quit with both windows open, then confirm both recover their own snapshots.
   await quit(first)
   assert.deepEqual(JSON.parse(readFileSync(join(profile, 'windows.json'), 'utf8')), ['primary', secondId])

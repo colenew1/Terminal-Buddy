@@ -33,8 +33,11 @@ export function computeClickDelta(term: Terminal, screenEl: HTMLElement, at: Cli
   // navigation inside the app, and the cursor is not a text caret.
   if (buf.type === 'alternate') return null
 
-  // The application asked for mouse events, so the click belongs to it.
-  if (term.modes.mouseTrackingMode !== 'none') return null
+  // Agents like Codex turn on mouse reporting for their own scroll handling
+  // while still editing an ordinary command line, and they ignore plain click
+  // reports — so honouring the mode here just made click-to-position dead in
+  // exactly the terminals people use it in. Full-screen apps that really own
+  // the pointer draw on the alternate buffer, which already returned above.
 
   // Scrolled back through history: the cursor is somewhere off-screen.
   if (buf.viewportY !== buf.baseY) return null

@@ -275,6 +275,11 @@ html[data-platform='darwin'] .topbar {
   background: var(--fg-faint);
 }
 
+/* Keeps the slot's width while the terminal is quiet. */
+.dot.is-idle {
+  visibility: hidden;
+}
+
 .badge {
   font-size: 9px;
   text-transform: uppercase;

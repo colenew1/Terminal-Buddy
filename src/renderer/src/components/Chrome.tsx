@@ -195,9 +195,13 @@ export function TabBar(): React.JSX.Element {
             ) : (
               <span className="tab-title">{s.title}</span>
             )}
-            {s.attention && <span className="dot attention" title="Time to take a look — click to acknowledge" />}
-            <button className="tab-close" data-move-session={s.id} title="Move terminal to another window" aria-label="Move terminal to another window" onClick={() => useStore.setState({ moveSessionId: s.id })}>⇥</button>
-            {!s.attention && s.unseen && <span className="dot unseen" title="New output" />}
+            {/* Always present: unseen flips on every chunk of output and off on every
+                keystroke, so a dot that mounts and unmounts resizes the title mid-typing. */}
+            <span className={`dot ${s.attention ? 'attention' : s.unseen ? 'unseen' : 'is-idle'}`}
+              title={s.attention ? 'Time to take a look — click to acknowledge' : s.unseen ? 'New output' : undefined} />
+            <button className="tab-close" data-move-session={s.id} disabled={s.detached}
+              title={s.detached ? 'Dock this terminal back before moving it to another window' : 'Move terminal to another window'}
+              aria-label="Move terminal to another window" onClick={() => useStore.setState({ moveSessionId: s.id })}>⇥</button>
             {s.status === 'exited' && <span className="tab-dead">exited</span>}
             <button className="tab-close" data-popout={s.id} title={s.detached ? 'Show popped-out terminal' : 'Pop out terminal'}
               onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); void useStore.getState().detachSession(s.id) }}>↗</button>

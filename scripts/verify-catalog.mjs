@@ -20,7 +20,7 @@ const meta = id => ({ type: 'session_meta', timestamp: '2026-01-01T00:00:00Z', p
 const module = { exports: {} }
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../src/main/catalog.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
-}).outputText, { module, exports: module.exports, process: { env: { CODEX_HOME: config, CLAUDE_CONFIG_DIR: claude } },
+}).outputText, { module, exports: module.exports, Buffer, process: { env: { CODEX_HOME: config, CLAUDE_CONFIG_DIR: claude } },
   require: name => name === 'node:os' ? { homedir: () => root } : require(name) })
 try {
   const modern = write(join(config, 'sessions', '2026', '01', '01'), 'modern', [meta('modern'), row('2026-02-03T12:00:00Z', 'Modern message')])
@@ -59,14 +59,25 @@ try {
   const renamed = (await reopened.scan()).chats.find(c => c.id === 'older')
   assert.equal(renamed.title, 'Admin Panel Main Chat')
   assert.equal(renamed.updatedAt, previousTime)
-  assert.equal(readFileSync(older, 'utf8'), historyBefore)
+  // Claude is told the new name in its own transcript, by appending one record.
+  const historyAfter = readFileSync(older, 'utf8')
+  assert.ok(historyAfter.startsWith(historyBefore), 'nothing already written was altered')
+  const appended = historyAfter.slice(historyBefore.length).trim().split('\n')
+  assert.equal(appended.length, 1)
+  assert.deepEqual(
+    (({ type, customTitle, sessionId }) => ({ type, customTitle, sessionId }))(JSON.parse(appended[0])),
+    { type: 'custom-title', customTitle: 'Admin Panel Main Chat', sessionId: 'older' })
   await assert.rejects(service.renameChat('claude', 'older', '   '))
+  const codexBefore = readFileSync(join(config, 'archived_sessions', 'archive.jsonl'), 'utf8')
   await Promise.all([service.renameChat('claude', 'older', 'Final admin name'), service.renameChat('codex', 'archived', 'Archived project')])
   const concurrent = new module.exports.CatalogService(join(root, 'cache.json'), () => {})
   const final = await concurrent.scan()
   assert.equal(final.chats.find(c => c.id === 'older').title, 'Final admin name')
   assert.equal(final.chats.find(c => c.id === 'archived').title, 'Archived project')
-  console.log('PASS saved-chat names survive rescans, restarts and concurrent renames without changing conversation files or recency')
+  // Codex rollouts carry no title field, so they are never written to.
+  assert.equal(readFileSync(join(config, 'archived_sessions', 'archive.jsonl'), 'utf8'), codexBefore)
+  assert.equal(final.chats.find(c => c.id === 'older').updatedAt, previousTime)
+  console.log('PASS renaming writes Claude a custom-title, leaves Codex files alone, and never changes recency')
 } finally {
   assert.ok(resolve(root).startsWith(resolve(tmpdir()) + sep))
   rmSync(root, { recursive: true, force: true })

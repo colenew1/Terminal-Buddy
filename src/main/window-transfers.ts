@@ -77,6 +77,9 @@ export class WindowTransfers {
       }
       const moving = states.slice(1).flatMap(s => s.sessions).filter(s => !onlyId || s.session.id === onlyId)
       if (onlyId && (moving.length !== 1 || this.owners.get(onlyId) !== sourceIds[0])) throw Error('That terminal belongs to another workspace or has closed.')
+      // Handing a pop-out to another workspace means destroying its window in the
+      // middle of the transfer. Dock it first and the move is an ordinary one.
+      if (moving.some(item => this.popouts.isDetached(item.session.id))) throw Error('Dock the popped-out terminal back before moving it to another window.')
       if (states[0].sessions.length + moving.length > 16) throw Error('The destination would exceed 16 terminals. Move fewer terminals or close some first.')
       const arrivals: TransferArrival[] = await Promise.all(moving.map(async item => {
         const snapshot = await this.ptys.snapshot(item.session.id)
@@ -101,10 +104,8 @@ export class WindowTransfers {
         throw error
       }
       // No await between ownership switch, arrival, and buffered output: ordered IPC.
-      for (const item of arrivals) {
-        this.popouts.dock(item.session.id, false)
-        this.owners.set(item.session.id, targetId)
-      }
+      // Detached terminals were rejected above, so nothing here owns a pop-out window.
+      for (const item of arrivals) this.owners.set(item.session.id, targetId)
       target.window.webContents.send('workspace:transferArrive', arrivals, targetWorkspace.unrestoredSessions)
       for (const source of sources as WindowEntry[]) source.window.webContents.send('workspace:transferRemove', [...movedIds])
       for (const item of arrivals) {

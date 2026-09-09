@@ -30,7 +30,9 @@ function RenameChatDialog({ entry, close }: { entry: ChatEntry; close: () => voi
       finally { pending.current = false; setBusy(false) }
     }}>
       <h2>Rename saved chat</h2>
-      <p>This name appears in Terminal Buddy’s saved chats and when you reopen the conversation.</p>
+      <p>{entry.agent === 'claude'
+        ? 'This renames the conversation itself, so Claude shows the new name when you resume it — not just here.'
+        : 'Codex conversations have no name of their own, so this name is used in Terminal Buddy and when you reopen the chat.'}</p>
       <label>Chat name<input ref={input} className="search" data-chat-name value={title} maxLength={100} required disabled={busy} onChange={event => setTitle(event.target.value)} /></label>
       {error && <p role="alert">{error}</p>}
       <div className="new-session-actions">

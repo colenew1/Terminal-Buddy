@@ -298,7 +298,9 @@ export default function TerminalArea(): React.JSX.Element {
                 {!s.detached && <button className="icon-btn tiny" data-focus-session={s.id}
                   title={focused ? 'Return to layout (Escape)' : 'Focus terminal (double-click header)'}
                   onClick={() => toggleFocus(s.id)}>{focused ? '↙' : '⛶'}</button>}
-                <button className="icon-btn tiny" data-move-session={s.id} title="Move terminal to another window" onClick={() => useStore.setState({ moveSessionId: s.id })}>⇥</button>
+                <button className="icon-btn tiny" data-move-session={s.id} disabled={s.detached}
+                  title={s.detached ? 'Dock this terminal back before moving it to another window' : 'Move terminal to another window'}
+                  onClick={() => useStore.setState({ moveSessionId: s.id })}>⇥</button>
                 <button className="icon-btn tiny" data-popout={s.id} title={s.detached ? 'Show popped-out terminal' : 'Pop out terminal'}
                   onClick={() => void useStore.getState().detachSession(s.id)}>↗</button>
                 <button
