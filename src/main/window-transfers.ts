@@ -109,7 +109,7 @@ export class WindowTransfers {
       for (const source of sources as WindowEntry[]) source.window.webContents.send('workspace:transferRemove', [...movedIds])
       for (const item of arrivals) {
         for (const frame of this.queues.get(item.session.id) ?? []) {
-          if (frame.channel === 'popout:state' || frame.channel === 'popout:dragging') continue
+          if (frame.channel === 'popout:state') continue
           if (frame.channel === 'pty:data' && Number(frame.args[2]) <= item.snapshot.seq) continue
           target.window.webContents.send(frame.channel, ...frame.args)
         }

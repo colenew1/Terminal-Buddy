@@ -8,6 +8,7 @@ export default function RestoreSessionDialog({ items }: { items: RestoreItem[] }
   const busy = useStore((s) => s.restoring)
   const [choosing, setChoosing] = useState(false)
   const available = items.filter((item) => item.available).map((item) => item.index)
+  const folderOnly = items.filter((item) => item.available && item.folderOnly).length
   const [selected, setSelected] = useState(available)
   useEffect(() => {
     const node = dialog.current!
@@ -26,17 +27,18 @@ export default function RestoreSessionDialog({ items }: { items: RestoreItem[] }
       <p>Would you like to reopen your {items.length} saved {items.length === 1 ? 'chat or terminal' : 'chats and terminals'}?</p>
       <div className="restore-list">
         {items.map((item) => (
-          <label key={item.index} className={`restore-row ${item.available ? '' : 'is-unavailable'}`}>
+          <label key={item.index} className={`restore-row ${item.available ? (item.folderOnly ? 'is-folder-only' : '') : 'is-unavailable'}`}>
             {choosing && <input type="checkbox" data-restore-index={item.index} checked={selected.includes(item.index)}
               disabled={busy || !item.available} onChange={(e) => setSelected((old) => e.target.checked ? [...old, item.index] : old.filter((i) => i !== item.index))} />}
             <span className="restore-detail"><strong>{item.session.title || 'Terminal'}</strong>
               <code title={item.session.cwd}>{item.session.cwd}</code>
-              <small>{item.available ? '' : 'Needs attention · '}{item.description}</small></span>
+              <small>{item.available ? (item.folderOnly ? 'Folder only · ' : '') : 'Needs attention · '}{item.description}</small></span>
           </label>
         ))}
       </div>
       <p className="restore-note">Saved conversations resume in new terminals. Running tasks, unsent text, and terminal scrollback don’t survive an app exit. No previous task is automatically resubmitted.</p>
       {available.length < items.length && <p className="restore-note">Unavailable entries are kept for recovery. You can find unlinked conversations in Saved chats.</p>}
+      {folderOnly > 0 && <p className="restore-note">{folderOnly === 1 ? 'One chat cannot be resumed' : `${folderOnly} chats cannot be resumed`} — an app crash can leave a chat file half-written. Those reopen in the right folder without resuming, and the conversations stay in Saved chats so you can link them back.</p>}
       <div className="restore-actions">
         <button className="btn primary" autoFocus data-restore-all disabled={busy || !(choosing ? selected : available).length}
           onClick={() => void useStore.getState().restoreSelected(choosing ? selected : available)}>

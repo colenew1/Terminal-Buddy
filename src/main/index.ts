@@ -389,7 +389,7 @@ function registerIpc(): void {
 
   ipcMain.handle('workspace:get', (e) => loadWorkspace(workspaceFor(e.sender).id))
   ipcMain.handle('workspace:prepareRestore', (_e, sessions: PersistedSession[]) => prepareRestore(sessions, loadSettings()))
-  ipcMain.handle('workspace:restoreSpec', (_e, session: PersistedSession) => restoreSpec(session, loadSettings()))
+  ipcMain.handle('workspace:restoreSpec', (_e, session: PersistedSession, folderOnly?: boolean) => restoreSpec(session, loadSettings(), folderOnly === true))
   ipcMain.on('workspace:saveSync', (event, w: Workspace) => {
     try {
       const { id } = workspaceFor(event.sender)

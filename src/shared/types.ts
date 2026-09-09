@@ -290,6 +290,8 @@ export interface RestoreItem {
   index: number
   session: PersistedSession
   available: boolean
+  /** The folder opens but the saved chat cannot be resumed; reopen it unlinked. */
+  folderOnly?: boolean
   description: string
 }
 

@@ -10,7 +10,6 @@ interface Detached {
   queue: { data: string; seq: number }[]
   bytes: number
   attention?: boolean
-  drag?: { pointer: Pos; origin: Pos }
   timeout: ReturnType<typeof setTimeout>
 }
 
@@ -82,8 +81,7 @@ export class PopoutWindows {
     if (!entry) return
     this.windows.delete(id)
     clearTimeout(entry.timeout)
-    if (!entry.window.isDestroyed()) entry.window.destroy()
-    this.send(id, 'popout:dragging', false)
+    this.destroy(entry.window)
     if (!this.stopping) {
       this.send(id, 'popout:state', id, false)
       if (reveal) {
@@ -92,6 +90,15 @@ export class PopoutWindows {
         main?.show(); main?.focus()
       }
     }
+  }
+
+  /** Tearing a window down inside its own close/IPC dispatch can take the app
+   *  with it, so queue the destroy unless we are quitting and need it gone now. */
+  private destroy(window: BrowserWindow): void {
+    if (window.isDestroyed()) return
+    window.removeAllListeners('close')
+    if (this.stopping) { window.destroy(); return }
+    setImmediate(() => { if (!window.isDestroyed()) window.destroy() })
   }
 
   closeAll(): void {
@@ -128,31 +135,12 @@ export class PopoutWindows {
     })
     child.on('closed', () => { if (this.windows.get(id) === entry) this.dock(id) })
     child.webContents.on('render-process-gone', () => this.dock(id))
-    let nativeDragging = false
-    child.on('will-move', () => {
-      nativeDragging = true
-      this.primary(id)?.showInactive()
-      this.send(id, 'popout:dragging', true, this.inDock(screen.getCursorScreenPoint(), id))
-    })
-    child.on('moved', () => {
-      if (!nativeDragging) return
-      nativeDragging = false
-      this.send(id, 'popout:dragging', false)
-      if (this.inDock(screen.getCursorScreenPoint(), id)) this.dock(id)
-    })
     try {
       if (process.env.ELECTRON_RENDERER_URL) {
         const url = new URL(process.env.ELECTRON_RENDERER_URL); url.searchParams.set('popout', id)
         await child.loadURL(url.toString())
       } else await child.loadFile(join(__dirname, '../renderer/index.html'), { query: { popout: id } })
     } catch (error) { this.dock(id); throw error }
-  }
-
-  private inDock(point: Pos, id: string): boolean {
-    const main = this.primary(id)
-    if (!main || main.isDestroyed() || !main.isVisible() || main.isMinimized()) return false
-    const b = main.getContentBounds()
-    return point.x >= b.x + 20 && point.x <= b.x + b.width - 20 && point.y >= b.y + 40 && point.y <= b.y + 140
   }
 
   register(): void {
@@ -189,26 +177,5 @@ export class PopoutWindows {
       if (this.owner(e.sender, id) || e.sender === this.primary(id)?.webContents) this.dock(id)
     })
     ipcMain.on('popout:focus', (e, id: string) => { if (e.sender === this.primary(id)?.webContents) this.focus(id) })
-    ipcMain.on('popout:drag', (e, id: string, phase: string, point: Pos) => {
-      if (!this.owner(e.sender, id) || !Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return
-      const entry = this.windows.get(id)!
-      if (phase === 'start') {
-        if (entry.window.isMaximized()) entry.window.unmaximize()
-        const bounds = entry.window.getBounds()
-        entry.drag = { pointer: point, origin: { x: bounds.x, y: bounds.y } }
-        const main = this.primary(id)
-        if (main?.isMinimized()) main.restore()
-        main?.showInactive()
-        this.send(id, 'popout:dragging', true, false)
-      } else if (phase === 'move' && entry.drag) {
-        entry.window.setPosition(Math.round(entry.drag.origin.x + point.x - entry.drag.pointer.x), Math.round(entry.drag.origin.y + point.y - entry.drag.pointer.y))
-        this.send(id, 'popout:dragging', true, this.inDock(point, id))
-      } else if (phase === 'end' || phase === 'cancel') {
-        const dragging = !!entry.drag
-        entry.drag = undefined
-        this.send(id, 'popout:dragging', false)
-        if (dragging && phase === 'end' && this.inDock(point, id)) this.dock(id)
-      }
-    })
   }
 }

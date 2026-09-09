@@ -4,9 +4,13 @@ import type { PersistedSession, RestoreItem, SessionSpec, Settings } from '@shar
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Validate the recorded file itself; never substitute the newest chat in a folder. */
-export async function validate(session: PersistedSession, settings?: Settings): Promise<void> {
+/** The folder is the only hard requirement: without it there is nothing to reopen. */
+async function validateFolder(session: PersistedSession): Promise<void> {
   if (!session || typeof session.cwd !== 'string' || !(await stat(session.cwd)).isDirectory()) throw Error('The project folder is unavailable.')
+}
+
+/** Validate the recorded file itself; never substitute the newest chat in a folder. */
+async function validateChat(session: PersistedSession, settings?: Settings): Promise<void> {
   if (session.assistantId) {
     if (session.agent || session.resume) throw Error('Custom assistants manage their own saved history.')
     if (!settings?.customAssistants?.some(p => p.id === session.assistantId)) throw Error('This custom assistant is no longer configured. Choose a new chat from +.')
@@ -41,24 +45,42 @@ export async function validate(session: PersistedSession, settings?: Settings): 
   if (!ids.has(ref.id)) throw Error('The saved file does not match this chat ID, or has no saved history yet.')
 }
 
+export async function validate(session: PersistedSession, settings?: Settings): Promise<void> {
+  await validateFolder(session)
+  await validateChat(session, settings)
+}
+
+function reason(error: unknown): string {
+  const code = (error as NodeJS.ErrnoException).code
+  return code === 'ENOENT' ? 'The saved folder or chat file is missing.'
+    : code === 'EACCES' || code === 'EPERM' ? 'The saved folder or chat file cannot be read.'
+    : (error as Error).message
+}
+
 export async function prepareRestore(sessions: PersistedSession[], settings?: Settings): Promise<RestoreItem[]> {
   return Promise.all(sessions.map(async (session,index) => {
+    try { await validateFolder(session) }
+    catch (error) { return { index, session, available: false, description: reason(error) } }
     try {
-      await validate(session, settings)
+      await validateChat(session, settings)
       return { index, session, available: true, description: session.assistantId ? `Start a fresh ${settings?.customAssistants.find(p => p.id === session.assistantId)?.name ?? 'custom assistant'} session (history stays in the CLI)` : session.resume ? `Resume ${session.resume.agent} conversation` : 'Reopen terminal folder only' }
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code
-      const description = code === 'ENOENT' ? 'The saved folder or chat file is missing.' : code === 'EACCES' || code === 'EPERM' ? 'The saved folder or chat file cannot be read.' : (error as Error).message
-      return { index, session, available: false, description }
+      // A crash can stop an agent mid-write. The chat link is broken, but the
+      // folder still opens, so this stays reopenable instead of dead-ending.
+      return { index, session, available: true, folderOnly: true, description: `${reason(error)} Reopens the folder without resuming; link the chat afterwards.` }
     }
   }))
 }
 
-export async function restoreSpec(session: PersistedSession, settings: Settings): Promise<SessionSpec> {
-  await validate(session, settings) // Files may have changed since the chooser opened.
+export async function restoreSpec(session: PersistedSession, settings: Settings, allowFolderOnly = false): Promise<SessionSpec> {
+  await validateFolder(session) // Files may have changed since the chooser opened.
+  let linked = true
+  try { await validateChat(session, settings) }
+  catch (error) { if (!allowFolderOnly) throw error; linked = false }
   const { resume, cwd, shellId, title, critter, span, pos } = session
-  const spec: SessionSpec = { cwd, shellId, title, critter, span, pos, requireCwd: true, assistantId: session.assistantId, assistantName: session.assistantName }
-  if (resume) {
+  const spec: SessionSpec = { cwd, shellId, title, critter, span, pos, requireCwd: true,
+    assistantId: linked ? session.assistantId : undefined, assistantName: linked ? session.assistantName : undefined }
+  if (resume && linked) {
     const template = resume.agent === 'claude' ? settings.claudeResumeCommand : settings.codexResumeCommand
     if (!template.includes('{id}')) throw Error('The resume command in Settings must include {id}.')
     Object.assign(spec, { resume, agent: resume.agent, transcript: { agent: resume.agent, path: resume.path }, initialCommand: template.replaceAll('{id}', resume.id) })

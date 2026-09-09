@@ -188,7 +188,10 @@ try {
   assert.match(await second.ev(`window.buddy.pty.create({cwd:${JSON.stringify(testHome)},assistantId:${JSON.stringify(profile.id)}}).then(()=>'UNEXPECTED',e=>e.message)`), /no longer configured/)
   const saved = await second.ev('window.buddy.workspace.get()')
   const restore = await second.ev(`window.buddy.workspace.prepareRestore(${JSON.stringify(saved.sessions)})`)
-  assert.ok(restore.every(item=>!item.available))
+  assert.ok(restore.every(item=>item.folderOnly), 'stale assistant sessions are offered as folder-only, never as a live assistant')
+  assert.match(await second.ev(`window.buddy.workspace.restoreSpec(${JSON.stringify(saved.sessions[0])}).then(()=>'UNEXPECTED',e=>e.message)`), /no longer configured/)
+  const folderSpec = await second.ev(`window.buddy.workspace.restoreSpec(${JSON.stringify(saved.sessions[0])}, true)`)
+  assert.ok(!folderSpec.assistantId && !folderSpec.initialCommand && !folderSpec.resume, 'a folder-only reopen drops the removed assistant')
   pass('removing a profile leaves live sessions running and blocks stale presets or recovery instead of opening a shell')
   await quit(second)
 } catch (error) {

@@ -36,14 +36,12 @@ const api = {
     init: (id: string): Promise<void> => ipcRenderer.invoke('popout:init', id),
     dock: (id: string): void => ipcRenderer.send('popout:dock', id),
     focus: (id: string): void => ipcRenderer.send('popout:focus', id),
-    drag: (id: string, phase: 'start' | 'move' | 'end' | 'cancel', point: Pos): void => ipcRenderer.send('popout:drag', id, phase, point),
     onInit: (cb: (value: PopoutInit) => void): Unsub => on('popout:init', cb),
     onState: (cb: (id: string, detached: boolean) => void): Unsub => on('popout:state', cb),
     onSize: (cb: (id: string, cols: number, rows: number) => void): Unsub => on('popout:size', cb),
     onInput: (cb: (id: string) => void): Unsub => on('popout:input', cb),
     onTitle: (cb: (title: string) => void): Unsub => on('popout:title', cb),
-    onSettings: (cb: (settings: Settings) => void): Unsub => on('popout:settings', cb),
-    onDragging: (cb: (dragging: boolean, over: boolean) => void): Unsub => on('popout:dragging', cb)
+    onSettings: (cb: (settings: Settings) => void): Unsub => on('popout:settings', cb)
   },
   shells: {
     list: (): Promise<ShellDef[]> => ipcRenderer.invoke('shells:get')
@@ -99,7 +97,7 @@ const api = {
     set: (w: Workspace): Promise<void> => ipcRenderer.invoke('workspace:set', w),
     saveSync: (w: Workspace): string | null => ipcRenderer.sendSync('workspace:saveSync', w),
     prepareRestore: (sessions: PersistedSession[]): Promise<RestoreItem[]> => ipcRenderer.invoke('workspace:prepareRestore', sessions),
-    restoreSpec: (session: PersistedSession): Promise<SessionSpec> => ipcRenderer.invoke('workspace:restoreSpec', session)
+    restoreSpec: (session: PersistedSession, folderOnly?: boolean): Promise<SessionSpec> => ipcRenderer.invoke('workspace:restoreSpec', session, folderOnly)
   },
 
   library: {

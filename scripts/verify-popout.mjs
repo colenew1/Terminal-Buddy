@@ -109,19 +109,13 @@ try{
   pop=await connect(true);await until(pop,"!!document.querySelector('.xterm-helper-textarea')")
   check('dragging a pane header outside really detaches it',await main.ev("!!document.querySelector('.detached-placeholder')"))
 
-  // The custom grip offers deterministic cross-window dragging and a real pointer-up docking boundary.
-  const target=await main.ev('({x:screenX+innerWidth/2,y:screenY+80})')
-  const grip=await pop.ev("(()=>{const r=document.querySelector('[data-popout-grip]').getBoundingClientRect();return{x:r.x+20,y:r.y+15,screenX,screenY}})()")
-  await mouse(pop,'mousePressed',grip.x,grip.y)
-  await until(main,"!!document.querySelector('.dock-target')")
-  // Browser-generated screen coordinates are tested through the public drag bridge
-  // after pointer capture; the move is native setPosition, not a CSS mock.
-  await pop.ev(`window.buddy.popout.drag(new URLSearchParams(location.search).get('popout'),'move',${JSON.stringify(target)})`)
-  await until(main,"!!document.querySelector('.dock-target.is-over')")
-  await pop.ev(`window.buddy.popout.drag(new URLSearchParams(location.search).get('popout'),'end',${JSON.stringify(target)})`).catch(()=>{})
+  // Docking is click-only: no drag bridge, and a real pointer press on the button.
+  check('the pop-out exposes no drag-to-dock bridge',await pop.ev("!('drag' in window.buddy.popout) && !('onDragging' in window.buddy.popout) && !document.querySelector('[data-popout-grip]')"))
+  const button=await pop.ev("(()=>{const r=document.querySelector('[data-dock-back]').getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()")
+  await mouse(pop,'mousePressed',button.x,button.y);await mouse(pop,'mouseReleased',button.x,button.y)
   await until(main,"!document.querySelector('.detached-placeholder')")
-  check('dropping onto the highlighted docking strip returns the same session',readFileSync(launches,'utf8').trim()===original)
-  check('docking clears the drop target',await main.ev("!document.querySelector('.dock-target')"))
+  check('clicking Dock back returns the same session',readFileSync(launches,'utf8').trim()===original)
+  check('the workspace never shows a drop strip',await main.ev("!document.querySelector('.dock-target')"))
 
   await detach()
   await main.ev("document.querySelector('.cell [data-popout]').click()")

@@ -17,7 +17,6 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
   const [error, setError] = useState('')
   const [attention, setAttention] = useState(false)
   const [reduceMotion, setReduceMotion] = useState(false)
-  const dragging = useRef(false)
   useEffect(() => {
     let term: Terminal | null = null, fit: FitAddon | null = null, ready = false, disposed = false
     const resize = (): void => {
@@ -65,9 +64,6 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyW') {
         event.preventDefault(); window.buddy.popout.dock(id); return
       }
-      if (event.key === 'Escape' && dragging.current) {
-        dragging.current = false; window.buddy.popout.drag(id, 'cancel', { x: window.screenX, y: window.screenY }); return
-      }
       const action = matchClipboard(event)
       if (action === 'paste') {
         event.preventDefault()
@@ -87,19 +83,14 @@ export default function DetachedTerminal({ id }: { id: string }): React.JSX.Elem
     void window.buddy.popout.init(id).catch((reason) => setError(String(reason)))
     return () => { disposed = true; observer.disconnect(); offPaste(); offInit(); offData(); offExit(); offTitle(); offAttention(); offSettings(); window.removeEventListener('keydown', onKey); term?.dispose(); terminal.current = null }
   }, [id])
-  const point = (event: React.PointerEvent): { x: number; y: number } => ({ x: event.screenX, y: event.screenY })
   return (
     <div className={`detached-app ${attention ? 'needs-look' : ''} ${reduceMotion ? 'no-motion' : ''}`} onPointerDownCapture={() => window.buddy.popout.seen(id)} onKeyDownCapture={() => window.buddy.popout.seen(id)}>
       <header className="detached-toolbar">
-        <div className="detached-grip" data-popout-grip title="Drag this handle to move; drop on Terminal Buddy’s docking strip to return"
-          onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); dragging.current = true; window.buddy.popout.drag(id, 'start', point(event)) }}
-          onPointerMove={(event) => { if (dragging.current) window.buddy.popout.drag(id, 'move', point(event)) }}
-          onPointerUp={(event) => { if (dragging.current) { dragging.current = false; window.buddy.popout.drag(id, 'end', point(event)) } }}
-          onPointerCancel={(event) => { dragging.current = false; window.buddy.popout.drag(id, 'cancel', point(event)) }}
-          onLostPointerCapture={(event) => { if (dragging.current) { dragging.current = false; window.buddy.popout.drag(id, 'cancel', point(event)) } }}>
-          <span aria-hidden="true">⠿</span><strong>{title}</strong><small>Drag to dock</small>
+        <div className="detached-heading">
+          <strong>{title}</strong><small>Ctrl+Shift+W docks it back</small>
         </div>
-        <button className="btn" data-dock-back onClick={() => window.buddy.popout.dock(id)}>Dock back ↙</button>
+        <button className="btn primary" data-dock-back title="Return this terminal to its Terminal Buddy workspace"
+          onClick={() => window.buddy.popout.dock(id)}>Dock back ↙</button>
       </header>
       <FileDropTarget enabled={true} canPaste={status.startsWith('Live terminal')}
         focus={() => terminal.current?.focus()} paste={text => terminal.current?.paste(text)}>

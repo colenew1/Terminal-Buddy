@@ -591,14 +591,15 @@ export const useStore = create<State & Actions>((set, get) => ({
     const activeIndex = get().restoreActiveIndex
     const failed = items.filter((item) => !item.available).map((item) => item.session)
     set({ restoring: true })
-    let opened = 0, activeId: string | null = null
+    let opened = 0, unlinked = 0, activeId: string | null = null
     for (const item of items) {
       if (!item.available || !indexes.includes(item.index)) continue
       try {
-        const spec = await window.buddy.workspace.restoreSpec(item.session)
+        const spec = await window.buddy.workspace.restoreSpec(item.session, item.folderOnly)
         const id = await get().openSession(spec)
         if (!id) throw Error('Could not open terminal')
         opened++
+        if (item.folderOnly) unlinked++
         if (item.index === activeIndex) activeId = id
       } catch { failed.push(item.session) }
     }
@@ -606,6 +607,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     if (activeId) get().setActive(activeId)
     get().persistNow()
     if (failed.length) get().notify(`Reopened ${opened}. ${failed.length} unavailable or unlinked — use Saved chats; their recovery entries are kept.`)
+    else if (unlinked) get().notify(`Reopened ${opened}. ${unlinked} opened as folders only — use Link a chat to reconnect their conversations.`)
   },
 
   async startFresh() {

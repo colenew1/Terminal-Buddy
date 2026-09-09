@@ -64,7 +64,6 @@ export default function App(): React.JSX.Element {
     window.addEventListener('focus', refresh)
     return () => window.removeEventListener('focus', refresh)
   }, [])
-  const [dockDrag, setDockDrag] = useState({ dragging: false, over: false })
   const [searchTerm, setSearchTerm] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -104,8 +103,7 @@ export default function App(): React.JSX.Element {
     })
     const offSize = window.buddy.popout.onSize((id, cols, rows) => getTerm(id)?.term.resize(cols, rows))
     const offInput = window.buddy.popout.onInput((id) => useStore.getState().markInput(id))
-    const offDrag = window.buddy.popout.onDragging((dragging, over) => setDockDrag({ dragging, over }))
-    return () => { offState(); offSize(); offInput(); offDrag() }
+    return () => { offState(); offSize(); offInput() }
   }, [])
 
   useEffect(() => {
@@ -332,7 +330,6 @@ export default function App(): React.JSX.Element {
       {restoreItems && <RestoreSessionDialog items={restoreItems} />}
       {walkthroughOpen && !restoreItems && <Walkthrough />}
       {linkSessionId && <LinkSessionDialog sessionId={linkSessionId} />}
-      {dockDrag.dragging && <div className={`dock-target ${dockDrag.over ? 'is-over' : ''}`}>Drop here to dock your terminal back</div>}
       {toast && <div className="toast">{toast}</div>}
     </div>
   )

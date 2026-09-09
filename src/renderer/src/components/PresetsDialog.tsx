@@ -32,7 +32,9 @@ export default function PresetsDialog(): React.JSX.Element {
     try {
       // Validate every directory and shell before starting any processes.
       const available = await window.buddy.workspace.prepareRestore(preset.sessions.map(x => ({ ...x, agent: undefined })))
-      if (available.some(x => !x.available)) throw Error(available.filter(x => !x.available).map(x => `${x.session.title}: ${x.description}`).join('\n'))
+      // A preset asks for exact assistants, so a folder-only fallback is a failure here.
+      const broken = available.filter(x => !x.available || x.folderOnly)
+      if (broken.length) throw Error(broken.map(x => `${x.session.title}: ${x.description}`).join('\n'))
       if (preset.sessions.some(x => !s.shells.some(shell => shell.id === x.shellId))) throw Error('A preset shell is unavailable on this computer. Open its folders manually and save a new preset.')
       const failed: string[] = []
       for (const item of preset.sessions) {
