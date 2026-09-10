@@ -29,6 +29,8 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
   // them, so the terminal never has to be rebuilt when settings change.
   const settings = useStore((s) => s.settings)
   const setActive = useStore((s) => s.setActive)
+  const agent = useStore((s) => s.agents[id])
+  const isCodex = agent === 'codex' || session.resume?.agent === 'codex'
 
   useEffect(() => {
     const host = hostRef.current
@@ -56,16 +58,6 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
 
     term.open(host)
     installTerminalScrolling(term)
-
-    // WebGL keeps 8 panes smooth, but it is not available everywhere and the
-    // context can be lost. Either way, fall back to the DOM renderer quietly.
-    try {
-      const webgl = new WebglAddon()
-      webgl.onContextLoss(() => webgl.dispose())
-      term.loadAddon(webgl)
-    } catch {
-      /* DOM renderer is fine */
-    }
 
     register(id, { term, fit, search, container: host })
 
@@ -141,6 +133,22 @@ export default function TerminalPane({ session, visible, interactive }: Props): 
       unregister(id)
     }
   }, [id, setActive])
+
+  useEffect(() => {
+    const h = getTerm(id)
+    if (!h || isCodex) return
+    // Codex frequently repaints rows away from its input cursor. The WebGL
+    // addon's partial-row model clears that cursor on unrelated row updates.
+    // Use xterm's DOM renderer for Codex, including when started in a plain shell.
+    const webgl = new WebglAddon()
+    let disposed = false
+    const dispose = (): void => { if (!disposed) { disposed = true; webgl.dispose() } }
+    try {
+      webgl.onContextLoss(dispose)
+      h.term.loadAddon(webgl)
+    } catch { dispose() }
+    return dispose
+  }, [id, isCodex])
 
   // Push setting changes onto the existing instance rather than recreating it.
   useEffect(() => {

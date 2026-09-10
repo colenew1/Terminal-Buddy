@@ -570,7 +570,20 @@ export const useStore = create<State & Actions>((set, get) => ({
     set({ catalogLoading: true })
     try {
       const catalog = force ? await window.buddy.catalog.refresh() : await window.buddy.catalog.get()
+      const previous = get().catalog
       set({ catalog })
+      // Follow /rename for linked panes still using the prior catalog title.
+      // A separately chosen terminal label remains a workspace preference.
+      for (const session of get().sessions) {
+        const resume = session.resume
+        if (!resume) continue
+        const matches = (chat: Catalog['chats'][number]): boolean => chat.agent === resume.agent && chat.id === resume.id
+        const before = previous?.chats.find(matches)
+        const after = catalog.chats.find(matches)
+        if (before && after && session.title === before.title.slice(0, 100) && before.title !== after.title) {
+          get().renameSession(session.id, after.title)
+        }
+      }
     } catch (e) {
       get().notify(`Catalog scan failed: ${(e as Error).message}`)
     } finally {

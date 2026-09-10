@@ -191,7 +191,9 @@ Both are gone: the menu is removed (`Menu.setApplicationMenu(null)`) and the app
 
 Saved chats have a **Rename** button in the catalog and chat details. These names persist across rescans and restarts, update linked open terminals, and are used when reopening the conversation.
 
-Renaming a **Claude** chat renames the conversation itself: Buddy appends a `custom-title` record — the same one Claude Code writes for a renamed session — so the new name also appears in `claude --resume`. Appending never rewrites anything already in the transcript, and title records are excluded from recency, so renaming never reorders your chat list. A name you chose outranks any AI title Claude generates later. **Codex** rollout files carry no title of any kind (its picker always shows the first user message), so those names are stored in Terminal Buddy only and the rollout file is never written to.
+Use **Catalog → Chats → Rename chat** to name a saved conversation. Claude names are appended as `custom-title` records; Codex names are saved through its local `thread/name/set` interface, without rewriting the transcript or sending terminal input. Codex must be installed and available on PATH. Both CLIs also support `/rename My chat name`; rescan Buddy's catalog afterwards to pick up the name. Agent-saved names take priority over older Buddy-only labels. Future Markdown exports use the chosen title; existing exported files are separate copies. The pencil in a terminal header changes only that terminal's workspace label.
+
+Codex panes use xterm's standard DOM renderer to avoid the GPU renderer dropping the cursor during partial redraws. Other panes retain GPU rendering where available. Pop-outs already use the standard renderer. The hidden input textarea's native caret is suppressed so only the terminal cursor is visible.
 
 Without a title record, a chat is named after its first real message — which is why untitled sessions read like `git pull main then lets talk`. Renaming is the fix.
 

@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline'
 import { join, basename, dirname, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
+import { readCodexChatNames, renameCodexChat } from './codex-chat-names'
 import type {
   Catalog,
   ChatEntry,
@@ -280,6 +281,7 @@ async function parseClaudeChat(path: string, bytes: number, mtime: number): Prom
     id,
     agent: 'claude',
     title: title || (preview ? squish(preview, 70) : 'Untitled session'),
+    customTitle: customTitle || undefined,
     preview,
     cwd: cwd || projectSlugToPath(project),
     project,
@@ -379,7 +381,7 @@ interface CacheShape {
 }
 
 // Bump whenever parsing changes, so cached entries are re-derived.
-const CACHE_VERSION = 7
+const CACHE_VERSION = 8
 
 /**
  * Indexes ~300MB of agent transcripts. Every parse is keyed on (size, mtime),
@@ -414,11 +416,13 @@ export class CatalogService {
    * one is what makes the new name show up in `claude --resume`, not just here.
    * Appending never rewrites a byte Claude already wrote.
    *
-   * Codex rollout files carry no title of any kind — its picker always shows the
-   * first user message — so there is nothing to write and the name stays local.
+   * Codex stores names outside the rollout; use its local metadata API.
    */
   private async writeChatTitle(entry: ChatEntry, title: string): Promise<void> {
-    if (entry.agent !== 'claude') return
+    if (entry.agent === 'codex') {
+      await renameCodexChat(CODEX_DIR, entry.id, title)
+      return
+    }
     const record = JSON.stringify({ type: 'custom-title', customTitle: title, sessionId: entry.id, timestamp: new Date().toISOString() })
     let tail = ''
     try {
@@ -460,7 +464,7 @@ export class CatalogService {
       await writeFile(file + '.tmp', JSON.stringify(next, null, 2), 'utf8')
       await rename(file + '.tmp', file)
       this.chatNames = next
-      this.last = { ...current, chats: current.chats.map(chat => chat.agent === agent && chat.id === id ? { ...chat, title: title.trim() } : chat) }
+      this.last = { ...current, chats: current.chats.map(chat => chat.agent === agent && chat.id === id ? { ...chat, title: title.trim(), customTitle: title.trim() } : chat) }
       return this.last
     })
     this.renameQueue = operation.catch(() => {})
@@ -591,7 +595,18 @@ export class CatalogService {
 
     this.onProgress({ phase: 'done', done: files.length, total: files.length })
     const names = this.names()
-    this.last = { skills, chats: chats.map(chat => names[`${chat.agent}:${chat.id}`] ? { ...chat, title: names[`${chat.agent}:${chat.id}`] } : chat), projects, scannedAt: Date.now(), errors }
+    // Read on every scan: /rename updates the index without touching the rollout.
+    const codexNames = await readCodexChatNames(CODEX_DIR).catch((error: Error) => {
+      errors.push(`Codex chat names: ${error.message}`)
+      return new Map<string, string>()
+    })
+    this.last = { skills, chats: chats.map(chat => {
+      const customTitle = chat.agent === 'codex'
+        ? codexNames.get(chat.id) || (chat.altId ? codexNames.get(chat.altId) : undefined)
+        : chat.customTitle
+      const title = customTitle || names[`${chat.agent}:${chat.id}`] || chat.title
+      return { ...chat, title, customTitle }
+    }), projects, scannedAt: Date.now(), errors }
     return this.last
   }
 

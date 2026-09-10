@@ -5,7 +5,7 @@ import type { ChatEntry } from '@shared/types'
 export default function RenameChatButton({ entry }: { entry: ChatEntry }): React.JSX.Element {
   const [editing, setEditing] = useState(false)
   return <span onClick={event => event.stopPropagation()} onDragStart={event => { event.preventDefault(); event.stopPropagation() }}>
-    <button className="btn tiny" data-rename-chat={entry.id} onClick={() => setEditing(true)}>Rename</button>
+    <button className="btn tiny" data-rename-chat={entry.id} title="Rename the saved conversation" onClick={() => setEditing(true)}>Rename chat</button>
     {editing && createPortal(<RenameChatDialog entry={entry} close={() => setEditing(false)} />, document.body)}
   </span>
 }
@@ -30,9 +30,8 @@ function RenameChatDialog({ entry, close }: { entry: ChatEntry; close: () => voi
       finally { pending.current = false; setBusy(false) }
     }}>
       <h2>Rename saved chat</h2>
-      <p>{entry.agent === 'claude'
-        ? 'This renames the conversation itself, so Claude shows the new name when you resume it — not just here.'
-        : 'Codex conversations have no name of their own, so this name is used in Terminal Buddy and when you reopen the chat.'}</p>
+      <p>This saves the conversation name in {entry.agent === 'claude' ? 'Claude Code' : 'Codex'} and Terminal Buddy. Future Markdown exports use this name too.</p>
+      <p>You can also type <code>/rename My chat name</code> inside the chat, then rescan the catalog here.</p>
       <label>Chat name<input ref={input} className="search" data-chat-name value={title} maxLength={100} required disabled={busy} onChange={event => setTitle(event.target.value)} /></label>
       {error && <p role="alert">{error}</p>}
       <div className="new-session-actions">

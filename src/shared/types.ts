@@ -118,6 +118,8 @@ export interface ChatEntry {
   altId?: string
   agent: Agent
   title: string
+  /** A name saved by the agent itself, preferred over legacy Buddy-only labels. */
+  customTitle?: string
   /** First user prompt, trimmed. Shown under the title. */
   preview: string
   cwd: string

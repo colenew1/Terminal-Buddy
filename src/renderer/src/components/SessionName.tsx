@@ -22,7 +22,7 @@ export default function SessionName({ session }: { session: Session }): React.JS
           if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.blur() }
           if (e.key === 'Escape') { e.preventDefault(); cancelled.current = true; e.currentTarget.blur() }
         }}
-      /> : <button className="session-name-button" title="Rename terminal (local label)" onClick={(e) => {
+      /> : <button className="session-name-button" title="Rename terminal label. To name the saved conversation, use Catalog → Chats → Rename chat or /rename in the chat." onClick={(e) => {
         e.stopPropagation(); cancelled.current = false; setEditing(true)
       }}><span>{session.title}</span><span className="rename-pencil" aria-hidden="true">✎</span></button>}
     </span>
