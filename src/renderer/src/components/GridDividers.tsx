@@ -12,7 +12,7 @@ interface Drag {
 }
 
 /** Dividers occupy the gaps, not a terminal's mouse-input surface. */
-export default function GridDividers({ columns, rows }: { columns: number[]; rows: number[] }): React.JSX.Element {
+export default function GridDividers({ columns, rows, lastRowCount }: { columns: number[]; rows: number[]; lastRowCount: number }): React.JSX.Element {
   const drag = useRef<Drag | null>(null)
   const [active, setActive] = useState<string | null>(null)
   const stop = (): void => { drag.current = null; setActive(null) }
@@ -41,13 +41,15 @@ export default function GridDividers({ columns, rows }: { columns: number[]; row
     const weights = axis === 'columns' ? columns : rows
     return weights.slice(0, -1).map((weight, index) => {
       const name = `${axis}-${index}`
+      // Stop internal column dividers above the final row's spanning pane.
+      const columnRowEnd = index >= lastRowCount - 1 ? rows.length : -1
       return <div key={name} className={`grid-divider ${axis === 'columns' ? 'is-vertical' : 'is-horizontal'} ${active === name ? 'is-resizing' : ''}`}
         data-axis={axis} data-divider-index={index} role="separator" tabIndex={0}
         aria-label={`Resize ${axis === 'columns' ? 'columns' : 'rows'} ${index + 1} and ${index + 2}`}
         aria-orientation={axis === 'columns' ? 'vertical' : 'horizontal'}
         aria-valuenow={Math.round(100 * weight / (weight + weights[index + 1]))} aria-valuemin={0} aria-valuemax={100}
         title="Drag to resize • Arrow keys for fine adjustment • Double-click to balance"
-        style={axis === 'columns' ? { gridColumn: index + 1, gridRow: '1 / -1' } : { gridRow: index + 1, gridColumn: '1 / -1' }}
+        style={axis === 'columns' ? { gridColumn: index + 1, gridRow: `1 / ${columnRowEnd}` } : { gridRow: index + 1, gridColumn: '1 / -1' }}
         onPointerDown={(event) => {
           if (event.button !== 0) return
           event.preventDefault()

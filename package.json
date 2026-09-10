@@ -1,6 +1,6 @@
 {
   "name": "terminal-buddy",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Friendly, organized terminals for your coding agents, with custom names and desktop alerts.",
   "main": "./out/main/index.js",
   "author": "Terminal Buddy contributors",

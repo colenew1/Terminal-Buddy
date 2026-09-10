@@ -198,6 +198,7 @@ export default function TerminalArea(): React.JSX.Element {
 
   const cols = baseColumns(sessions.length)
   const rows = Math.ceil(sessions.length / cols)
+  const lastRowCount = sessions.length - (rows - 1) * cols
   const columnWeights = gridWeights(cols, gridSizes.columns)
   const rowWeights = gridWeights(rows, gridSizes.rows)
 
@@ -249,7 +250,9 @@ export default function TerminalArea(): React.JSX.Element {
             style={
               layout === 'grid' && !focused
                 ? {
-                    gridColumn: i % cols + 1,
+                    // The last pane fills any unused slots in the final row.
+                    // Reordering into this slot gives another terminal the extra width.
+                    gridColumn: i === sessions.length - 1 ? `${i % cols + 1} / -1` : i % cols + 1,
                     gridRow: Math.floor(i / cols) + 1,
                     ['--critter' as string]: `hsl(${s.critter.hue} 70% 62%)`
                   }
@@ -351,7 +354,7 @@ export default function TerminalArea(): React.JSX.Element {
           </div>
         )
       })}
-      {!locked && !focused && layout === 'grid' && <GridDividers columns={columnWeights} rows={rowWeights} />}
+      {!locked && !focused && layout === 'grid' && <GridDividers columns={columnWeights} rows={rowWeights} lastRowCount={lastRowCount} />}
     </div>
   )
 }
