@@ -41,15 +41,15 @@ export default function GridDividers({ columns, rows, lastRowCount }: { columns:
     const weights = axis === 'columns' ? columns : rows
     return weights.slice(0, -1).map((weight, index) => {
       const name = `${axis}-${index}`
-      // Stop internal column dividers above the final row's spanning pane.
-      const columnRowEnd = index >= lastRowCount - 1 ? rows.length : -1
+      // The final row divider stops before panes that extend into the gaps below.
+      const rowColumnEnd = index === rows.length - 2 ? lastRowCount + 1 : -1
       return <div key={name} className={`grid-divider ${axis === 'columns' ? 'is-vertical' : 'is-horizontal'} ${active === name ? 'is-resizing' : ''}`}
         data-axis={axis} data-divider-index={index} role="separator" tabIndex={0}
         aria-label={`Resize ${axis === 'columns' ? 'columns' : 'rows'} ${index + 1} and ${index + 2}`}
         aria-orientation={axis === 'columns' ? 'vertical' : 'horizontal'}
         aria-valuenow={Math.round(100 * weight / (weight + weights[index + 1]))} aria-valuemin={0} aria-valuemax={100}
         title="Drag to resize • Arrow keys for fine adjustment • Double-click to balance"
-        style={axis === 'columns' ? { gridColumn: index + 1, gridRow: `1 / ${columnRowEnd}` } : { gridRow: index + 1, gridColumn: '1 / -1' }}
+        style={axis === 'columns' ? { gridColumn: index + 1, gridRow: '1 / -1' } : { gridRow: index + 1, gridColumn: `1 / ${rowColumnEnd}` }}
         onPointerDown={(event) => {
           if (event.button !== 0) return
           event.preventDefault()

@@ -224,6 +224,9 @@ export default function TerminalArea(): React.JSX.Element {
       }}
     >
       {sessions.map((s, i) => {
+        const column = i % cols
+        const row = Math.floor(i / cols)
+        const fillsGapBelow = row === rows - 2 && column >= lastRowCount
         const active = s.id === activeId
         const visible = focused ? s.id === focusedSessionId : layout === 'grid' || active
         const isDragging = dragId === s.id
@@ -250,10 +253,10 @@ export default function TerminalArea(): React.JSX.Element {
             style={
               layout === 'grid' && !focused
                 ? {
-                    // The last pane fills any unused slots in the final row.
-                    // Reordering into this slot gives another terminal the extra width.
-                    gridColumn: i === sessions.length - 1 ? `${i % cols + 1} / -1` : i % cols + 1,
-                    gridRow: Math.floor(i / cols) + 1,
+                    // Extend panes above empty final-row slots down into the gap.
+                    // Reordering into these slots gives another terminal the extra height.
+                    gridColumn: column + 1,
+                    gridRow: fillsGapBelow ? `${row + 1} / -1` : row + 1,
                     ['--critter' as string]: `hsl(${s.critter.hue} 70% 62%)`
                   }
                 : undefined

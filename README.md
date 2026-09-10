@@ -285,7 +285,7 @@ codex "{skill}"
 
 ## Rearranging panes
 
-When the last grid row is incomplete, its last terminal fills the remaining width. Three terminals get a full-width bottom pane; five get a bottom pane spanning two columns. Unlock and drag a different terminal into that last position to give it the extra space. Resize dividers stop above the expanded pane.
+When the last grid row is incomplete, terminals directly above the empty slots extend vertically to fill them. With three or five terminals, the rightmost terminal spans both rows. Unlock and drag a different terminal into that position to give it the extra height. Horizontal resize dividers stop before the taller panes.
 
 The grid is locked by default, because a stray drag while you are working should never shuffle six running agents. Click the **padlock** in the title bar (or `Ctrl+Shift+L`) and:
 
